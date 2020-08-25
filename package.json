@@ -1,0 +1,40 @@
+{
+  "name": "starboard-python",
+  "version": "0.0.1",
+  "description": "Python cells for Starboard Notebook",
+  "main": "dist/starboard-python.js",
+  "module": "dist/starboard-python.js",
+  "scripts": {
+    "build": "rimraf dist && rollup -c rollup.config.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gzuidhof/starboard-python.git"
+  },
+  "keywords": [
+    "pyodide",
+    "starboard",
+    "python",
+    "starboard-notebook",
+    "notebook"
+  ],
+  "author": "Guido Zuidhof <me@guido.io>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/gzuidhof/starboard-python/issues"
+  },
+  "homepage": "https://github.com/gzuidhof/starboard-python#readme",
+  "dependencies": {
+    "@types/iframe-resizer": "^3.5.8",
+    "@types/markdown-it": "^10.0.2",
+    "lit-html": "^1.2.1",
+    "starboard-notebook": "^0.4.8"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^14.0.0",
+    "@rollup/plugin-node-resolve": "^8.4.0",
+    "rollup-plugin-typescript2": "^0.27.1",
+    "typescript": "^3.9.7"
+  }
+}
