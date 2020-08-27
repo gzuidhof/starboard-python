@@ -37,6 +37,20 @@ function gearsIcon({ width = 24, height = 24, hidden = false, title = 'Gears Ico
 }
 
 
+
+function isPyProxy(val: any) {
+    return typeof val === 'function' && window.pyodide._module.PyProxy.isPyProxy(val)
+}
+
+function serializePyProxiesForConsoleOutput(data: any[]) {
+    return data.map((v: any) => {
+        if (isPyProxy(v)) {
+            return "<PyProxy> " + JSON.stringify(v)
+        }
+        return v;
+    });
+}
+
 class PythonCellHandler {
     private elements!: CellElements;
     private editor: any;
@@ -87,6 +101,7 @@ class PythonCellHandler {
 
     async run() {
         const pyoPromise = loadPyodide();
+        const codeToRun = this.cell.textContent;
 
         this.lastRunId++;
         const currentRunId = this.lastRunId;
@@ -106,7 +121,9 @@ class PythonCellHandler {
         // For deduplication, limits the updates to only one per animation frame.
         let hasUpdateScheduled = false;
         const consoleCallback = (msg: any) => {
-            output.push(msg); 
+            msg.data = serializePyProxiesForConsoleOutput(msg.data);
+            output.push(msg);
+
             if (!hasUpdateScheduled) {
                 window.setTimeout(() => {
                     if (this.outputElement) {
@@ -125,42 +142,54 @@ class PythonCellHandler {
         lithtml.render(this.getControls(), this.elements.topControlsElement);
 
         this.runtime.consoleCatcher.hook(consoleCallback);
-        const val = await window.pyodide.runPythonAsync(this.cell.textContent, (msg) => console.log("MESSAGE", msg));
-        window.$_ = val;
+
+
+        let val = undefined;
+        try {
+            val = await window.pyodide.runPythonAsync(codeToRun, (msg) => console.log("MESSAGE", msg), (err) => console.error("ERROR", err));
+            window.$_ = val;
+
+            if (val !== undefined) {
+                if (isPyProxy(val)) {
+                    let div = document.createElement('div');
+                    div.className = 'rendered_html'; // We don't actually load the css for this yet, tbd if that is necessary
+                    let element;
+                    if (val._repr_html_ !== undefined) {
+                        let result = val._repr_html_();
+                        if (typeof result === 'string') {
+                            div.appendChild(new DOMParser().parseFromString(result, 'text/html').body.firstChild as any);
+                            element = div;
+                        } else {
+                            element = result;
+                        }
+                        console.log("REPR HTML", val._repr_html_());
+                        if (element !== undefined) {
+                            htmlOutput.appendChild(element);
+                        }
+                    }
+                } else {
+                    output.push({
+                        method: "result",
+                        data: [val]
+                    });
+                }
+            }
+        } catch(e) {
+            output.push({
+                method: "error",
+                data: [e]
+            });
+        }
 
         window.setTimeout(() => 
             this.runtime.consoleCatcher.unhook(consoleCallback)
         );
 
-        if (val !== undefined) {
-            if (typeof val === 'function' && window.pyodide._module.PyProxy.isPyProxy(val)) {
-                let div = document.createElement('div');
-                div.className = 'rendered_html'; // We don't actually load the css for this yet, tbd if that is necessary
-                let element;
-                if (val._repr_html_ !== undefined) {
-                let result = val._repr_html_();
-                if (typeof result === 'string') {
-                    div.appendChild(new DOMParser().parseFromString(result, 'text/html').body.firstChild as any);
-                    element = div;
-                } else {
-                    element = result;
-                }
-                htmlOutput.appendChild(element);
-            }
-            }
-            else {
-                output.push({
-                    method: "result",
-                    data: [val]
-                });
-            }
-        }
-
         if (this.lastRunId === currentRunId) {
             this.isCurrentlyRunning = false;
             lithtml.render(this.getControls(), this.elements.topControlsElement);
         }
-        return val;
+        return val
     }
 
     focusEditor() {
