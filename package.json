@@ -1,9 +1,10 @@
 {
   "name": "starboard-python",
-  "version": "0.0.3",
+  "version": "0.1.6",
   "description": "Python cells for Starboard Notebook",
-  "main": "dist/starboard-python.js",
-  "module": "dist/starboard-python.js",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "typings": "dist/index.d.ts",
   "scripts": {
     "build": "rimraf dist && rollup -c rollup.config.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -29,7 +30,7 @@
     "@types/iframe-resizer": "^3.5.8",
     "@types/markdown-it": "^10.0.2",
     "lit-html": "^1.2.1",
-    "starboard-notebook": "^0.4.8"
+    "starboard-notebook": "^0.4.10"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^14.0.0",

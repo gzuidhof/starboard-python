@@ -6,14 +6,13 @@ export default
 {
   input: `src/index.ts`,
   output: [
-    {file: 'dist/starboard-python.js', format: 'es'}
+    {file: 'dist/index.js', format: 'es'}
   ],
   plugins: [
     typescript({
       include: [
           './src/*.ts',
       ],
-      useTsconfigDeclarationDir: true
     }),
     resolve(),
     commonjs(),

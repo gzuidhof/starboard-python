@@ -83,6 +83,8 @@ export function loadPyodide() {
             }
           }
         }
+
+        console.log(`Loading Pyodide Python environment from ${baseURL}`);
     
         recurseDir('/');
     
