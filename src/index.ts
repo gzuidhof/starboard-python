@@ -63,7 +63,7 @@ export function registerPython() {
     const icons = runtime.exports.templates.icons;
 
     const PYTHON_CELL_TYPE_DEFINITION: CellTypeDefinition = {
-        name: "Python (experimental)",
+        name: "Python",
         cellType: "py",
         createHandler: (cell: Cell, runtime: Runtime) => new PythonCellHandler(cell, runtime),
     }
