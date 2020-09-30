@@ -20,7 +20,7 @@ export function loadPyodide() {
       // This is filled in by the Makefile to be either a local file or the
       // deployed location. TODO: This should be done in a less hacky
       // way.
-      var baseURL = self.languagePluginUrl || 'https://pyodide-cdn2.iodide.io/v0.15.0/full/';
+      var baseURL = self.pyodideArtifactsUrl|| 'https://pyodide-cdn2.iodide.io/v0.15.0/full/';
       baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
 
       console.log(`Loading Pyodide Python environment from ${baseURL}`);
