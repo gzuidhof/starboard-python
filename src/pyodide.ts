@@ -22,6 +22,8 @@ export function loadPyodide() {
       // way.
       var baseURL = self.languagePluginUrl || 'https://pyodide-cdn2.iodide.io/v0.15.0/full/';
       baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
+
+      console.log(`Loading Pyodide Python environment from ${baseURL}`);
     
       ////////////////////////////////////////////////////////////
       // Package loading
@@ -83,8 +85,6 @@ export function loadPyodide() {
             }
           }
         }
-
-        console.log(`Loading Pyodide Python environment from ${baseURL}`);
     
         recurseDir('/');
     
@@ -149,7 +149,7 @@ export function loadPyodide() {
                             `loaded from ${loadedPackages[pkg]}!`);
               return;
             } else {
-              _messageCallback(`${pkg} already loaded from ${loadedPackages[pkg]}`)
+              // _messageCallback(`${pkg} already loaded from ${loadedPackages[pkg]}`)
             }
           } else if (pkg in toLoad) {
             if (package_uri != toLoad[pkg]) {
@@ -397,6 +397,7 @@ export function loadPyodide() {
                 fixRecursionLimit(self.pyodide);
                 self.pyodide.globals =
                     self.pyodide.runPython('import sys\nsys.modules["__main__"]');
+
                 self.pyodide = makePublicAPI(self.pyodide, PUBLIC_API);
                 self.pyodide._module.packages = json;
                 if (self.iodide !== undefined) {
@@ -434,49 +435,7 @@ export function loadPyodide() {
           self.pyodide.loadPackage = loadPackage;
         }, () => {});
       }, () => {});
-    
-      ////////////////////////////////////////////////////////////
-      // Iodide-specific functionality, that doesn't make sense
-      // if not using with Iodide.
-      // if (self.iodide !== undefined) {
-      //   // Load the custom CSS for Pyodide
-      //   let link = document.createElement('link');
-      //   link.rel = 'stylesheet';
-      //   link.type = 'text/css';
-      //   link.href = `${baseURL}renderedhtml.css`;
-      //   document.getElementsByTagName('head')[0].appendChild(link);
-    
-      //   // Add a custom output handler for Python objects
-      //   self.iodide.addOutputRenderer({
-      //     shouldRender : (val) => {
-      //       return (typeof val === 'function' &&
-      //               pyodide._module.PyProxy.isPyProxy(val));
-      //     },
-    
-      //     render : (val) => {
-      //       let div = document.createElement('div');
-      //       div.className = 'rendered_html';
-      //       var element;
-      //       if (val._repr_html_ !== undefined) {
-      //         let result = val._repr_html_();
-      //         if (typeof result === 'string') {
-      //           div.appendChild(new DOMParser()
-      //                               .parseFromString(result, 'text/html')
-      //                               .body.firstChild);
-      //           element = div;
-      //         } else {
-      //           element = result;
-      //         }
-      //       } else {
-      //         let pre = document.createElement('pre');
-      //         pre.textContent = val.toString();
-      //         div.appendChild(pre);
-      //         element = div;
-      //       }
-      //       return element.outerHTML;
-      //     }
-      //   });
-      // }
+
     });
   loader = languagePluginLoader;
   return languagePluginLoader

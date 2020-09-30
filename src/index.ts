@@ -5,6 +5,9 @@ import { Runtime, ControlButton } from "starboard-notebook/dist/src/runtime";
 import { loadPyodide } from "./pyodide.js";
 import { Pyodide as PyodideType } from "./typings";
 
+// @ts-ignore
+import css from "./pyodide-styles.css";
+
 declare global {
     interface Window {
       pyodide: PyodideType;
@@ -14,6 +17,39 @@ declare global {
 
 
 export function registerPython() {
+    let CURRENT_HTML_OUTPUT_ELEMENT: HTMLElement | undefined = undefined;
+
+    /**
+     * Dummy object to act like that used by Iodide.
+     * This is used for libraries that output to html (e.g. matplotlib), we imitate
+     * iodide's API here. Alternatively we could fork Pyodide and change the Python code, but
+     * let's avoid that for as long as possible.
+     */
+    (window as any).iodide = {
+        output: {
+            // Create a new element with tagName
+            // and add it to an element with id "root".
+            element: (tagName: string) => {
+                const elem = document.createElement(tagName);
+                if (!CURRENT_HTML_OUTPUT_ELEMENT) {
+                    console.log("HTML output from pyodide but nowhere to put it, will append to body instead.")
+                    document.querySelector("body")!.appendChild(elem);
+                } else {
+                    CURRENT_HTML_OUTPUT_ELEMENT.appendChild(elem);
+                }
+                
+                return elem;
+            }
+        }
+    };
+
+    /** Naughty matplotlib WASM backend captures and disables contextmenu globally.. hack to prevent that */
+    window.addEventListener("contextmenu", function (event) {
+        if (event.target instanceof HTMLElement && event.target.id.startsWith("matplotlib_") && event.target.tagName === "CANVAS") {
+            return false;
+        }
+        event.stopPropagation();
+    }, true);
 
     /* These globals are exposed by Starboard Notebook. We can re-use them so we don't have to bundle them again. */
     const runtime = window.runtime;
@@ -42,15 +78,6 @@ export function registerPython() {
 
     function isPyProxy(val: any) {
         return typeof val === 'function' && window.pyodide._module.PyProxy.isPyProxy(val)
-    }
-
-    function serializePyProxiesForConsoleOutput(data: any[]) {
-        return data.map((v: any) => {
-            if (isPyProxy(v)) {
-                return "<PyProxy> " + JSON.stringify(v)
-            }
-            return v; 
-        });
     }
 
     class PythonCellHandler {
@@ -109,21 +136,17 @@ export function registerPython() {
             const currentRunId = this.lastRunId;
             this.isCurrentlyRunning = true;
             
-            
             this.outputElement = new ConsoleOutputElement();
-            this.outputElement.logs = [];
+            const output: {method: string; data: any[]}[] = [];
+            this.outputElement.logs = output;
 
             const htmlOutput = document.createElement("div");
-
             lithtml.render(html`${this.outputElement}${htmlOutput}`, this.elements.bottomElement);
-
-            const output: {method: string; data: any[]}[] = [];
-            this.outputElement.logs = [];
+            CURRENT_HTML_OUTPUT_ELEMENT = htmlOutput;
 
             // For deduplication, limits the updates to only one per animation frame.
             let hasUpdateScheduled = false;
             const consoleCallback = (msg: any) => {
-                msg.data = serializePyProxiesForConsoleOutput(msg.data);
                 output.push(msg);
 
                 if (!hasUpdateScheduled) {
@@ -145,7 +168,6 @@ export function registerPython() {
 
             this.runtime.consoleCatcher.hook(consoleCallback);
 
-
             let val = undefined;
             try {
                 val = await window.pyodide.runPythonAsync(codeToRun, (msg) => console.log(msg), (err) => console.error("ERROR", err));
@@ -153,28 +175,31 @@ export function registerPython() {
 
                 if (val !== undefined) {
                     if (isPyProxy(val)) {
-                        let div = document.createElement('div');
-                        div.className = 'rendered_html'; // We don't actually load the css for this yet, tbd if that is necessary
-                        let element;
+                        let hadHTMLOutput = false;
                         if (val._repr_html_ !== undefined) {
                             let result = val._repr_html_();
                             if (typeof result === 'string') {
+                                let div = document.createElement('div');
+                                div.className = 'rendered_html';
                                 div.appendChild(new DOMParser().parseFromString(result, 'text/html').body.firstChild as any);
-                                element = div;
-                            } else {
-                                element = result;
-                            }
-                            console.log("REPR HTML", val._repr_html_());
-                            if (element !== undefined) {
-                                htmlOutput.appendChild(element);
+                                htmlOutput.appendChild(div);
+                                hadHTMLOutput = true;
                             }
                         }
+                        if (!hadHTMLOutput) {
+                            output.push({
+                                method: "result",
+                                data: [val]
+                            });
+                        }
+
                     } else {
                         output.push({
                             method: "result",
                             data: [val]
                         });
                     }
+
                 }
             } catch(e) {
                 output.push({
@@ -191,6 +216,9 @@ export function registerPython() {
                 this.isCurrentlyRunning = false;
                 lithtml.render(this.getControls(), this.elements.topControlsElement);
             }
+
+            this.outputElement.logs = [...output];
+
             return val
         }
 
@@ -203,6 +231,12 @@ export function registerPython() {
         }
     
     }
+
+
+    const styleSheet = document.createElement("style")
+    styleSheet.id = "pyodide-styles";
+    styleSheet.innerHTML = css
+    document.head.appendChild(styleSheet)
 
     runtime.definitions.cellTypes.register("py", PYTHON_CELL_TYPE_DEFINITION);
 }

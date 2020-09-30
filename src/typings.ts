@@ -9,4 +9,5 @@ export declare type Pyodide = {
     autocomplete: any;
     checkABI: any;
     _module: any;
+    repr: (v: any) => string;
 }
