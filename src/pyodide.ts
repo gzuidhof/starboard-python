@@ -23,7 +23,7 @@ export function loadPyodide() {
       var baseURL = self.pyodideArtifactsUrl|| 'https://pyodide-cdn2.iodide.io/v0.15.0/full/';
       baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
 
-      console.log(`Loading Pyodide Python environment from ${baseURL}`);
+      // console.log(`Loading Pyodide Python environment from ${baseURL}`);
     
       ////////////////////////////////////////////////////////////
       // Package loading
@@ -117,7 +117,6 @@ export function loadPyodide() {
           errorCallback = () => {};
         }
         let _messageCallback = (msg) => {
-          // console.log(msg);
           messageCallback(msg);
         };
         let _errorCallback = (errMsg) => {
@@ -248,7 +247,7 @@ export function loadPyodide() {
             } else {
               scriptSrc = `${package_uri}`;
             }
-            _messageCallback(`Loading ${pkg} from ${scriptSrc}`)
+            // _messageCallback(`Loading ${pkg} from ${scriptSrc}`)
             loadScript(scriptSrc, () => {}, () => {
               // If the package_uri fails to load, call monitorRunDependencies twice
               // (so packageCounter will still hit 0 and finish loading), and remove
