@@ -149,7 +149,10 @@ export function registerPython() {
                 window.$_ = val;
 
                 if (val !== undefined) {
-                    if (isPyProxy(val)) {
+                    if (val instanceof HTMLElement) {
+                        htmlOutput.appendChild(val);  
+                    }
+                    else if (isPyProxy(val)) {
                         let hadHTMLOutput = false;
                         if (val._repr_html_ !== undefined) {
                             let result = val._repr_html_();
