@@ -65,7 +65,8 @@ export function registerPython() {
 
     const PYTHON_CELL_TYPE_DEFINITION: CellTypeDefinition = {
         name: "Python",
-        cellType: "py",
+        // @ts-ignore Ignore to be removed after updating typings.
+        cellType: ["python", "python3", "pypy", "py"],
         createHandler: (cell: Cell, runtime: Runtime) => new PythonCellHandler(cell, runtime),
     }
 
@@ -210,6 +211,9 @@ export function registerPython() {
     styleSheet.id = "pyodide-styles";
     styleSheet.innerHTML = css
     document.head.appendChild(styleSheet)
-
-    runtime.definitions.cellTypes.register("py", PYTHON_CELL_TYPE_DEFINITION);
+    // @ts-ignore
+    PYTHON_CELL_TYPE_DEFINITION.cellType.forEach((cellTypeIdentifier: string) => {
+        runtime.definitions.cellTypes.register(cellTypeIdentifier, PYTHON_CELL_TYPE_DEFINITION);
+    })
+    
 }
