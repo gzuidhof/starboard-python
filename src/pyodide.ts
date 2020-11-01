@@ -5,29 +5,28 @@
  * * wrapped in a function
  * * singleton loader (for lazy loading from multiple callpoints without coordination)
  * * removed console.log for pyodide messages
+ * * moved baseURL function to separate function
  */
 
 // Singleton language plugin loader
 let loader = undefined;
 
+export function getBaseUrl() {
+  var baseURL = self.pyodideArtifactsUrl|| 'https://cdn.jsdelivr.net/pyodide/v0.15.0/full/';
+  baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
+}
 
 export function loadPyodide() {
   if (loader !== undefined) {
     return loader;
   }
 
-  const languagePluginLoader = new Promise((resolve, reject) => {
-      // This is filled in by the Makefile to be either a local file or the
-      // deployed location. TODO: This should be done in a less hacky
-      // way.
-      var baseURL = self.pyodideArtifactsUrl|| 'https://pyodide-cdn2.iodide.io/v0.15.0/full/';
-      baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
-
+  const languagePluginLoader = new Promise((resolve, reject) => {    
+      const baseUrl = getBaseUrl();
       // console.log(`Loading Pyodide Python environment from ${baseURL}`);
     
       ////////////////////////////////////////////////////////////
       // Package loading
-      let loadedPackages = {};
       var loadPackagePromise = new Promise((resolve) => resolve());
       // Regexp for validating package name and URI
       var package_name_regexp = '[a-z0-9_][a-z0-9_\-]*'

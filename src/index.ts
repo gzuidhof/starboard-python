@@ -16,7 +16,6 @@ declare global {
     }
 }
 
-
 export function registerPython() {
     let CURRENT_HTML_OUTPUT_ELEMENT: HTMLElement | undefined = undefined;
 
@@ -54,7 +53,7 @@ export function registerPython() {
 
     /* These globals are exposed by Starboard Notebook. We can re-use them so we don't have to bundle them again. */
     const runtime = window.runtime;
-
+    
     const html = runtime.exports.libraries.LitHtml.html;
     const lithtml = runtime.exports.libraries.LitHtml;
 
@@ -66,7 +65,7 @@ export function registerPython() {
     const PYTHON_CELL_TYPE_DEFINITION: CellTypeDefinition = {
         name: "Python",
         // @ts-ignore Ignore to be removed after updating typings.
-        cellType: ["python", "python3", "pypy", "py"],
+        cellType: ["python", "python3", "ipython3", "pypy", "py"],
         createHandler: (cell: Cell, runtime: Runtime) => new PythonCellHandler(cell, runtime),
     }
 
