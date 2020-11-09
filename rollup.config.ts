@@ -24,7 +24,7 @@ export default {
   plugins: [
     typescript({
       include: [
-          './src/*.ts',
+          './src/**/*.ts',
       ],
     }),
     resolve(),

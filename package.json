@@ -1,12 +1,13 @@
 {
   "name": "starboard-python",
-  "version": "0.2.12",
+  "version": "0.4.0",
   "description": "Python cells for Starboard Notebook",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "typings": "dist/index.d.ts",
   "scripts": {
     "build": "rimraf dist && rollup -c rollup.config.ts",
+    "build:live": "rollup -c rollup.config.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -35,7 +36,7 @@
     "lit-html": "^1.2.1",
     "rimraf": "^3.0.2",
     "rollup-plugin-typescript2": "^0.27.1",
-    "starboard-notebook": "^0.6.0",
+    "starboard-notebook": "^0.6.3",
     "typescript": "^3.9.7"
   }
 }

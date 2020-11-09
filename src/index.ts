@@ -2,15 +2,16 @@ import { CellTypeDefinition, CellHandlerAttachParameters, CellElements, Cell } f
 import * as lithtmlImport from "lit-html";
 import { Runtime, ControlButton } from "starboard-notebook/dist/src/runtime";
 
-import { loadPyodide } from "./pyodide.js";
-import { Pyodide as PyodideType } from "./typings";
+import { injectPyodideStyles, prefetchPyodideFiles } from "./loader.js";
+import { loadPyodide } from "./pyodide/loader.js";
+import { flatPromise } from "./flatPromise.js";
+import { Pyodide } from "./pyodide/types.js";
 
-// @ts-ignore
-import css from "./pyodide-styles.css";
+
 
 declare global {
     interface Window {
-      pyodide: PyodideType;
+      pyodide: Pyodide;
       runtime: Runtime
       $_: any;
     }
@@ -18,6 +19,11 @@ declare global {
 
 export function registerPython() {
     let CURRENT_HTML_OUTPUT_ELEMENT: HTMLElement | undefined = undefined;
+
+    /**
+     * This is a promise chain used to make sure no cells overlap in execution.
+     */
+    let currentExecutionPromise = Promise.resolve();
 
     /**
      * Dummy object to act like that used by Iodide.
@@ -60,11 +66,11 @@ export function registerPython() {
     const StarboardTextEditor = runtime.exports.elements.StarboardTextEditor;
     const ConsoleOutputElement = runtime.exports.elements.ConsoleOutputElement;
     const cellControlsTemplate = runtime.exports.templates.cellControls;
+    const renderIfHtml = runtime.exports.core.renderIfHtmlOutput;
     const icons = runtime.exports.templates.icons;
 
     const PYTHON_CELL_TYPE_DEFINITION: CellTypeDefinition = {
         name: "Python",
-        // @ts-ignore Ignore to be removed after updating typings.
         cellType: ["python", "python3", "ipython3", "pypy", "py"],
         createHandler: (cell: Cell, runtime: Runtime) => new PythonCellHandler(cell, runtime),
     }
@@ -119,6 +125,20 @@ export function registerPython() {
 
             this.editor = new StarboardTextEditor(this.cell, this.runtime, {language: "python"});
             topElement.appendChild(this.editor);
+
+            injectPyodideStyles();
+            // When a Python cell is created - we can start downloading the Pyodide files as most likely we will need them soon.
+            prefetchPyodideFiles();
+            
+        }
+
+        private async waitForPyodide(pyoPromise: Promise<any>) {
+            // We load the pyodide runtime and show an icon while that is happening..
+            this.isCurrentlyLoadingPyodide = true;
+            lithtml.render(this.getControls(), this.elements.topControlsElement);
+            await pyoPromise;
+            this.isCurrentlyLoadingPyodide = false;
+            lithtml.render(this.getControls(), this.elements.topControlsElement);
         }
 
         async run() {
@@ -130,36 +150,35 @@ export function registerPython() {
             this.isCurrentlyRunning = true;
             
             this.outputElement = new ConsoleOutputElement();
-            this.outputElement.hook(this.runtime.consoleCatcher);
-            
+
             const htmlOutput = document.createElement("div");
             lithtml.render(html`${this.outputElement}${htmlOutput}`, this.elements.bottomElement);
-            CURRENT_HTML_OUTPUT_ELEMENT = htmlOutput;
-
-            // We load the pyodide runtime and show an icon while that is happening..
-            this.isCurrentlyLoadingPyodide = true;
-            lithtml.render(this.getControls(), this.elements.topControlsElement);
-            await pyoPromise;
-            this.isCurrentlyLoadingPyodide = false;
-            lithtml.render(this.getControls(), this.elements.topControlsElement);
+            
+            
 
             let val = undefined;
+            const {resolve, promise} = flatPromise();
+
+            await this.waitForPyodide(pyoPromise);
+            await currentExecutionPromise;
+
+            CURRENT_HTML_OUTPUT_ELEMENT = htmlOutput;
+            this.outputElement.hook(this.runtime.consoleCatcher);
+            currentExecutionPromise = promise;
             try {
                 val = await window.pyodide.runPythonAsync(codeToRun, (msg) => console.log(msg), (err) => console.error("ERROR", err));
                 window.$_ = val;
+                const htmlWasRendered = renderIfHtml(val, htmlOutput);
 
-                if (val !== undefined) {
-                    if (val instanceof HTMLElement) {
-                        htmlOutput.appendChild(val);  
-                    }
-                    else if (isPyProxy(val)) {
+                if (!htmlWasRendered && val !== undefined) {
+                    if (isPyProxy(val)) {
                         let hadHTMLOutput = false;
                         if (val._repr_html_ !== undefined) {
                             let result = val._repr_html_();
                             if (typeof result === 'string') {
                                 let div = document.createElement('div');
                                 div.className = 'rendered_html';
-                                div.appendChild(new DOMParser().parseFromString(result, 'text/html').body.firstChild as any);
+                                div.innerHTML = result;
                                 htmlOutput.appendChild(div);
                                 hadHTMLOutput = true;
                             }
@@ -178,6 +197,7 @@ export function registerPython() {
                     }
                 }
             } catch(e) {
+                console.error(e);
                 this.outputElement.addEntry({
                     method: "error",
                     data: [e]
@@ -186,6 +206,7 @@ export function registerPython() {
 
             // Not entirely sure this has to be awaited, is any output delayed by a tick from pyodide?
             await this.outputElement.unhookAfterOneTick(this.runtime.consoleCatcher);
+            resolve();
 
             if (this.lastRunId === currentRunId) {
                 this.isCurrentlyRunning = false;
@@ -205,14 +226,5 @@ export function registerPython() {
     
     }
 
-
-    const styleSheet = document.createElement("style")
-    styleSheet.id = "pyodide-styles";
-    styleSheet.innerHTML = css
-    document.head.appendChild(styleSheet)
-    // @ts-ignore
-    PYTHON_CELL_TYPE_DEFINITION.cellType.forEach((cellTypeIdentifier: string) => {
-        runtime.definitions.cellTypes.register(cellTypeIdentifier, PYTHON_CELL_TYPE_DEFINITION);
-    })
-    
+    runtime.definitions.cellTypes.register(PYTHON_CELL_TYPE_DEFINITION.cellType, PYTHON_CELL_TYPE_DEFINITION);
 }
