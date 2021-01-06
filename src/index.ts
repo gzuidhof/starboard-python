@@ -6,8 +6,7 @@ import { injectPyodideStyles, prefetchPyodideFiles } from "./loader.js";
 import { loadPyodide } from "./pyodide/loader.js";
 import { flatPromise } from "./flatPromise.js";
 import { Pyodide } from "./pyodide/types.js";
-
-
+import { resolveImports } from "./import.js";
 
 declare global {
     interface Window {
@@ -166,13 +165,14 @@ export function registerPython() {
             this.outputElement.hook(this.runtime.consoleCatcher);
             currentExecutionPromise = promise;
             try {
+                resolveImports(codeToRun);
                 val = await window.pyodide.runPythonAsync(codeToRun, (msg) => console.log(msg), (err) => console.error("ERROR", err));
                 window.$_ = val;
                 const htmlWasRendered = renderIfHtml(val, htmlOutput);
 
                 if (!htmlWasRendered && val !== undefined) {
                     if (isPyProxy(val)) {
-                        let hadHTMLOutput = false;
+                        let hadOutput = false;
                         if (val._repr_html_ !== undefined) {
                             let result = val._repr_html_();
                             if (typeof result === 'string') {
@@ -180,10 +180,15 @@ export function registerPython() {
                                 div.className = 'rendered_html';
                                 div.innerHTML = result;
                                 htmlOutput.appendChild(div);
-                                hadHTMLOutput = true;
+                                hadOutput = true;
                             }
+                        } else if (val._repr_latex_ !== undefined) {
+                            const katex = await runtime.exports.libraries.async.KaTeX();
+                            let div = document.createElement('div');
+                            katex.render(val._repr_latex_(), div, {"displayMode": true})
+                            htmlOutput.appendChild(div);
                         }
-                        if (!hadHTMLOutput) {
+                        if (!hadOutput) {
                             this.outputElement.addEntry({
                                 method: "result",
                                 data: [val]

@@ -1,4 +1,4 @@
-import { PyodideModule } from "./pyodide";
+import { PyodideModule } from "./types";
 
 // Regexp for validating package name and URI
 const PACKAGE_REGEX = '[a-z0-9_][a-z0-9_\-]*';

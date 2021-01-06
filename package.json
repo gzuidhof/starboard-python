@@ -36,7 +36,7 @@
     "lit-html": "^1.2.1",
     "rimraf": "^3.0.2",
     "rollup-plugin-typescript2": "^0.27.1",
-    "starboard-notebook": "^0.6.3",
+    "starboard-notebook": "^0.7.1",
     "typescript": "^3.9.7"
   }
 }
