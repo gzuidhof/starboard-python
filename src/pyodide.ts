@@ -12,7 +12,7 @@
 let loader = undefined;
 
 export function getBaseUrl() {
-  var baseURL = self.pyodideArtifactsUrl|| 'https://cdn.jsdelivr.net/pyodide/v0.15.0/full/';
+  var baseURL = self.pyodideArtifactsUrl|| 'https://cdn.jsdelivr.net/pyodide/v0.16.1/full/';
   baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
 }
 
