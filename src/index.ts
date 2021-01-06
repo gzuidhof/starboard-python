@@ -61,6 +61,7 @@ export function registerPython() {
     const ConsoleOutputElement = runtime.exports.elements.ConsoleOutputElement;
     const cellControlsTemplate = runtime.exports.templates.cellControls;
     const icons = runtime.exports.templates.icons;
+    const katexPromise = runtime.exports.libraries.async.KaTeX;
 
     const PYTHON_CELL_TYPE_DEFINITION: CellTypeDefinition = {
         name: "Python",
@@ -158,8 +159,25 @@ export function registerPython() {
                             let result = val._repr_html_();
                             if (typeof result === 'string') {
                                 let div = document.createElement('div');
-                                div.className = 'rendered_html';
+                                div.className = 'rendered_html cell-output-html';
                                 div.appendChild(new DOMParser().parseFromString(result, 'text/html').body.firstChild as any);
+                                htmlOutput.appendChild(div);
+                                hadHTMLOutput = true;
+                            }
+                        } else if (val._repr_latex_ !== undefined) {
+                            let result = val._repr_latex_();
+                            if (typeof result === 'string') {
+                                let div = document.createElement('div');
+                                div.className = 'rendered_html cell-output-html';
+                                const katex = await katexPromise();
+                                if (result.startsWith("$$")) {
+                                    result = result.substr(2, result.length-3)
+                                    katex.render(result, div, {"throwOnError": false, "errorColor": " #cc0000", displayMode: true});
+                                } else if (result.startsWith("$")) {
+                                    result = result.substr(1, result.length-2)
+                                    katex.render(result, div, {"throwOnError": false, "errorColor": " #cc0000", displayMode: false});
+                                }
+
                                 htmlOutput.appendChild(div);
                                 hadHTMLOutput = true;
                             }

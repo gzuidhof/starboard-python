@@ -12,8 +12,9 @@
 let loader = undefined;
 
 export function getBaseUrl() {
-  var baseURL = self.pyodideArtifactsUrl|| 'https://cdn.jsdelivr.net/pyodide/v0.16.1/full/';
+  let baseURL = self.pyodideArtifactsUrl || 'https://cdn.jsdelivr.net/pyodide/v0.16.1/full/';
   baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
+  return baseURL;
 }
 
 export function loadPyodide() {
@@ -182,7 +183,7 @@ export function loadPyodide() {
               return package_uri.replace(/\.js$/, ".data");
             };
           };
-          return baseURL + path;
+          return baseUrl + path;
         };
     
         let promise = new Promise((resolve, reject) => {
@@ -242,7 +243,7 @@ export function loadPyodide() {
             let scriptSrc;
             let package_uri = toLoad[pkg];
             if (package_uri == 'default channel') {
-              scriptSrc = `${baseURL}${pkg}.js`;
+              scriptSrc = `${baseUrl}${pkg}.js`;
             } else {
               scriptSrc = `${package_uri}`;
             }
@@ -335,7 +336,7 @@ export function loadPyodide() {
     
       ////////////////////////////////////////////////////////////
       // Loading Pyodide
-      let wasmURL = `${baseURL}pyodide.asm.wasm`;
+      let wasmURL = `${baseUrl}pyodide.asm.wasm`;
       let Module = {};
       self.Module = Module;
     
@@ -385,11 +386,11 @@ export function loadPyodide() {
         return pyodide_module.get_completions(path);
       }
     
-          Module.locateFile = (path) => baseURL + path;
+          Module.locateFile = (path) => baseUrl + path;
       var postRunPromise = new Promise((resolve, reject) => {
         Module.postRun = () => {
           delete self.Module;
-          fetch(`${baseURL}packages.json`)
+          fetch(`${baseUrl}packages.json`)
               .then((response) => response.json())
               .then((json) => {
                 fixRecursionLimit(self.pyodide);
@@ -421,9 +422,9 @@ export function loadPyodide() {
     
       Promise.all([ postRunPromise, dataLoadPromise ]).then(() => resolve());
     
-      const data_script_src = `${baseURL}pyodide.asm.data.js`;
+      const data_script_src = `${baseUrl}pyodide.asm.data.js`;
       loadScript(data_script_src, () => {
-        const scriptSrc = `${baseURL}pyodide.asm.js`;
+        const scriptSrc = `${baseUrl}pyodide.asm.js`;
         loadScript(scriptSrc, () => {
           // The emscripten module needs to be at this location for the core
           // filesystem to install itself. Once that's complete, it will be replaced
