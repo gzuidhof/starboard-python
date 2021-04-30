@@ -15,7 +15,6 @@ export { runStarboardPython } from "./run.js";
 declare global {
     interface Window {
       pyodide: PyodideType;
-      loadPyodide(opts?: {indexURL: string}): any;
       runtime: Runtime
       $_: any;
     }

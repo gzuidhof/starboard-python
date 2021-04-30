@@ -1,6 +1,8 @@
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import typescript from 'rollup-plugin-typescript2';
+import dts from "rollup-plugin-dts";
+
 
 const CleanCSS = require('clean-css');
 
@@ -27,6 +29,7 @@ export default {
           './src/*.ts',
       ],
     }),
+    dts(),
     resolve(),
     commonjs(),
     css(),
