@@ -4,10 +4,9 @@ export declare type Pyodide = {
     loadPackage(names: string, messageCallback?: (msg: any) => void, errorCallback?: (err: any) => void): Promise<any>;
     loadedPackages(packages: string[]): any;
     globals: any;
-    pyimport: () => any;
+
     version: () => string;
-    autocomplete: any;
     checkABI: any;
     _module: any;
-    repr: (v: any) => string;
+    isPyProxy(v: any): boolean;
 }

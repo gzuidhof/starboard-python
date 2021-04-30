@@ -1,10 +1,12 @@
 // @ts-ignore
 import css from "./pyodide-styles.css";
 
-import {loadPyodide as loadPy} from "./pyodide";
+import "./pyodide";
+import { getPluginOpts } from "./opts";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted"
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
+let pyodideLoadSingleton: Promise<void> | undefined = undefined;
 
 let CURRENT_HTML_OUTPUT_ELEMENT: HTMLElement | undefined = undefined;
 
@@ -62,10 +64,15 @@ export function setupPythonSupport() {
     setupStatus = "completed";
 }
 
-export async function loadPyodide() {
+export async function loadPyodide(artifactsUrl?: string) {
+    if (pyodideLoadSingleton) return pyodideLoadSingleton
+
     loadingStatus = "loading";
-    await loadPy() as Promise<void>;
+    const artifactsURL = artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl || "https://cdn.jsdelivr.net/pyodide/v0.17.0/full/"
+    pyodideLoadSingleton = await (window as any).loadPyodide({indexURL: artifactsURL}) as Promise<void>;
     loadingStatus = "ready";
+
+    return pyodideLoadSingleton;
 }
 
 export function getPyodideLoadingStatus() {
