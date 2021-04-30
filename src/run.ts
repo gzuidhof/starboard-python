@@ -1,4 +1,4 @@
-import { Runtime } from "starboard-notebook/dist/src/runtime";
+import { Runtime } from "starboard-notebook/dist/src/types";
 import { loadPyodide, setGlobalPythonOutputElement as setGlobalPythonHtmlOutputElement, setupPythonSupport } from "./global";
 import { isPyProxy } from "./util";
 
@@ -20,7 +20,7 @@ export async function runStarboardPython(runtime: Runtime, codeToRun: string, re
 
     let val = undefined;
     try {
-        val = await window.pyodide.runPythonAsync(codeToRun, (msg) => console.log(msg), (err) => console.error("ERROR", err));
+        val = await window.pyodide.runPythonAsync(codeToRun/*, (msg) => console.log(msg), (err) => console.error("ERROR", err)*/);
         window.$_ = val;
 
         if (val !== undefined) {
@@ -71,7 +71,7 @@ export async function runStarboardPython(runtime: Runtime, codeToRun: string, re
     } catch(e) {
         outputElement.addEntry({
             method: "error",
-            data: [e]
+            data: [e.toString()]
         });
     }
 

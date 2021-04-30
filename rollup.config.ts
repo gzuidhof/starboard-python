@@ -1,6 +1,7 @@
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import typescript from 'rollup-plugin-typescript2';
+import dts from "rollup-plugin-dts";
 
 const CleanCSS = require('clean-css');
 
@@ -16,7 +17,7 @@ const css = () => {return {
 }}
 
 
-export default {
+export default [{
   input: `src/index.ts`,
   output: [
     {file: 'dist/index.js', format: 'es'}
@@ -31,5 +32,14 @@ export default {
     commonjs(),
     css(),
   ]
+},
+{
+  input: `src/index.ts`,
+  output: [
+    {file: 'dist/index.d.ts', format: 'es'},
+  ], plugins: [
+    dts(),
+  ]
 }
+]
 ;

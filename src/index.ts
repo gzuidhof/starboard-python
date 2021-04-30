@@ -1,11 +1,13 @@
-import { CellTypeDefinition, CellHandlerAttachParameters, CellElements, Cell } from "starboard-notebook/dist/src/types";
+import { CellTypeDefinition, CellHandlerAttachParameters, CellElements, Cell, StarboardPlugin } from "starboard-notebook/dist/src/types";
 import * as lithtmlImport from "lit-html";
-import { Runtime, ControlButton } from "starboard-notebook/dist/src/runtime";
+import { Runtime, ControlButton } from "starboard-notebook/dist/src/types";
 
 import { Pyodide as PyodideType } from "./typings";
 
 import { getPyodideLoadingStatus, loadPyodide, setupPythonSupport, setGlobalPythonOutputElement } from "./global.js";
 import { runStarboardPython } from "./run.js";
+import { isPyProxy } from "./util";
+import { setPluginOpts, StarboardPythonPluginOpts } from "./opts";
 
 export { getPyodideLoadingStatus, setupPythonSupport, loadPyodide, setGlobalPythonOutputElement}
 export { runStarboardPython } from "./run.js";
@@ -31,7 +33,6 @@ export function registerPython() {
 
     const PYTHON_CELL_TYPE_DEFINITION: CellTypeDefinition = {
         name: "Python",
-        // @ts-ignore Ignore to be removed after updating typings.
         cellType: ["python", "python3", "ipython3", "pypy", "py"],
         createHandler: (cell: Cell, runtime: Runtime) => new PythonCellHandler(cell, runtime),
     }
@@ -54,7 +55,7 @@ export function registerPython() {
 
         private getControls(): lithtmlImport.TemplateResult | string {
             const icon = this.isCurrentlyRunning ? icons.ClockIcon : icons.PlayCircleIcon;
-            const tooltip = this.isCurrentlyRunning ? "Run Cell": "Cell is running";
+            const tooltip = this.isCurrentlyRunning ? "Cell is running": "Run Cell";
             const runButton: ControlButton = {
                 icon,
                 tooltip,
@@ -115,4 +116,22 @@ export function registerPython() {
     }
 
     runtime.definitions.cellTypes.register(PYTHON_CELL_TYPE_DEFINITION.cellType, PYTHON_CELL_TYPE_DEFINITION);
+}
+
+export const plugin: StarboardPlugin = {
+    id: "starboard-python",
+    metadata: {
+        name: "Starboard Python",
+    },
+    exports: {
+        getPyodideLoadingStatus: getPyodideLoadingStatus,
+        runStarboardPython: runStarboardPython,
+        isPyProxy: isPyProxy,
+        setGlobalPythonOutputElement: setGlobalPythonOutputElement,
+        loadPyodide: loadPyodide,
+    },
+    async register(opts: StarboardPythonPluginOpts = {}) {
+        setPluginOpts(opts);
+        registerPython();
+    }
 }
