@@ -8,6 +8,8 @@ let setupStatus: "unstarted" | "started" | "completed" = "unstarted"
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
 let pyodideLoadSingleton: Promise<void> | undefined = undefined;
 
+// A global value that is the current HTML element to attach matplotlib figures to..
+// perhaps this can be done in a cleaner way.
 let CURRENT_HTML_OUTPUT_ELEMENT: HTMLElement | undefined = undefined;
 
 export function setGlobalPythonOutputElement(el: HTMLElement | undefined) {
@@ -23,30 +25,6 @@ export function setupPythonSupport() {
         return;
     }
     setupStatus = "started";
-
-    /**
-     * Dummy object to act like that used by Iodide.
-     * This is used for libraries that output to html (e.g. matplotlib), we imitate
-     * iodide's API here. Alternatively we could fork Pyodide and change the Python code, but
-     * let's avoid that for as long as possible.
-     */
-     (window as any).iodide = {
-        output: {
-            // Create a new element with tagName
-            // and add it to an element with id "root".
-            element: (tagName: string) => {
-                const elem = document.createElement(tagName);
-                if (!CURRENT_HTML_OUTPUT_ELEMENT) {
-                    console.log("HTML output from pyodide but nowhere to put it, will append to body instead.")
-                    document.querySelector("body")!.appendChild(elem);
-                } else {
-                    CURRENT_HTML_OUTPUT_ELEMENT.appendChild(elem);
-                }
-                
-                return elem;
-            }
-        }
-    };
 
     /** Naughty matplotlib WASM backend captures and disables contextmenu globally.. hack to prevent that */
     window.addEventListener("contextmenu", function (event) {
@@ -69,8 +47,23 @@ export async function loadPyodide(artifactsUrl?: string) {
 
     loadingStatus = "loading";
     const artifactsURL = artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl || "https://cdn.jsdelivr.net/pyodide/v0.17.0/full/"
-    pyodideLoadSingleton = await (window as any).loadPyodide({indexURL: artifactsURL}) as Promise<void>;
+    pyodideLoadSingleton = (window as any).loadPyodide({indexURL: artifactsURL}) as Promise<void>;
+    await pyodideLoadSingleton;
     loadingStatus = "ready";
+
+    // TODO: perhaps we can do this in a cleaner way by passing an output element to runPython or something.
+    (window.pyodide as any).matplotlibHelpers = {
+        createElement: (tagName: string) => {
+            const elem = document.createElement(tagName);
+            if (!CURRENT_HTML_OUTPUT_ELEMENT) {
+                console.log("HTML output from pyodide but nowhere to put it, will append to body instead.")
+                document.querySelector("body")!.appendChild(elem);
+            } else {
+                CURRENT_HTML_OUTPUT_ELEMENT.appendChild(elem);
+            }
+            return elem;
+        }
+    }
 
     return pyodideLoadSingleton;
 }

@@ -93,8 +93,9 @@ export function registerPython() {
 
             if (getPyodideLoadingStatus() !== "ready") {
                 this.isCurrentlyLoadingPyodide = true;
-                lithtml.render(this.getControls(), this.elements.topControlsElement);
             }
+            lithtml.render(this.getControls(), this.elements.topControlsElement);
+            
             const val = await runStarboardPython(this.runtime, codeToRun, this.elements.bottomElement);
             this.isCurrentlyLoadingPyodide = false;
             if (this.lastRunId === currentRunId) {

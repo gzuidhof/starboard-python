@@ -5,6 +5,8 @@
 
 // @ts-nocheck
 
+import { patchMatplotlib } from "./matplotlib";
+
 /**
  * The :ref:`js-api-pyodide` module object. Must be present as a global variable
  * called
@@ -241,7 +243,7 @@
        Module.loadedPackages[pkg] = uri;
        packageList.push(pkg);
      }
- 
+
      let resolveMsg;
      if (packageList.length > 0) {
        let packageNames = packageList.join(', ');
@@ -258,6 +260,11 @@
      // see the new files.
      Module.runPythonSimple('import importlib\n' +
                             'importlib.invalidate_caches()\n');
+
+    if (packageList.length > 0 && packageList.indexOf("matplotlib") !== -1) {
+      //  console.debug("Applied Starboard matplotlib monkeypatch");
+      patchMatplotlib(Module);
+    }
    };
  
    // This is a promise that is resolved iff there are no pending package loads.
