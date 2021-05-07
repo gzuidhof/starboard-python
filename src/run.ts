@@ -13,14 +13,14 @@ let pythonRunChain: Promise<any> = Promise.resolve();
 export async function runStarboardPython(
   runtime: Runtime,
   codeToRun: string,
-  renderOutputIntoElement: HTMLElement,
+  renderOutputIntoElement: HTMLElement
 ): Promise<any> {
   setupPythonSupport();
   const pyoPromise = loadPyodide();
   const done = flatPromise();
 
-  const alreadyRunningPythonCodeDone = pythonRunChain.catch((_) => undefined);
-  pythonRunChain = pythonRunChain.then(() => done.promise);
+  const alreadyRunningPythonCodeDone = pythonRunChain.catch((_) => 0);
+  pythonRunChain = pythonRunChain.finally(() => done.promise);
 
   // await any already executing python cells.
   await alreadyRunningPythonCodeDone;
@@ -38,6 +38,7 @@ export async function runStarboardPython(
   await pyoPromise;
 
   let val = undefined;
+  let error: any = undefined;
   try {
     pythonRunChain = window.pyodide.runPythonAsync(codeToRun);
     val = await pythonRunChain;
@@ -53,10 +54,7 @@ export async function runStarboardPython(
           if (typeof result === "string") {
             let div = document.createElement("div");
             div.className = "rendered_html cell-output-html";
-            div.appendChild(
-              new DOMParser().parseFromString(result, "text/html").body
-                .firstChild as any,
-            );
+            div.appendChild(new DOMParser().parseFromString(result, "text/html").body.firstChild as any);
             htmlOutput.appendChild(div);
             hadHTMLOutput = true;
           }
@@ -69,15 +67,15 @@ export async function runStarboardPython(
             if (result.startsWith("$$")) {
               result = result.substr(2, result.length - 3);
               katex.render(result, div, {
-                "throwOnError": false,
-                "errorColor": " #cc0000",
+                throwOnError: false,
+                errorColor: " #cc0000",
                 displayMode: true,
               });
             } else if (result.startsWith("$")) {
               result = result.substr(1, result.length - 2);
               katex.render(result, div, {
-                "throwOnError": false,
-                "errorColor": " #cc0000",
+                throwOnError: false,
+                errorColor: " #cc0000",
                 displayMode: false,
               });
             }
@@ -99,15 +97,19 @@ export async function runStarboardPython(
       }
     }
   } catch (e) {
+    error = e;
     outputElement.addEntry({
       method: "error",
-      data: [e.toString()],
+      data: [`${e.name} ${e.message}`],
     });
   }
 
   // Not entirely sure this has to be awaited, is any output delayed by a tick from pyodide?
   await outputElement.unhookAfterOneTick(runtime.consoleCatcher);
   done.resolve();
+  if (error !== undefined) {
+    throw error;
+  }
 
   return val;
 }

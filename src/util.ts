@@ -1,3 +1,3 @@
 export function isPyProxy(val: any) {
-    return window.pyodide.isPyProxy(val)
+  return window.pyodide.isPyProxy(val);
 }
