@@ -135,6 +135,11 @@ export function registerPython(runtime: Runtime) {
     async dispose() {
       this.editor.remove();
     }
+
+    clear() {
+      const html = lithtml.html;
+      lithtml.render(html``, this.elements.bottomElement);
+    }
   }
 
   runtime.definitions.cellTypes.register(PYTHON_CELL_TYPE_DEFINITION.cellType, PYTHON_CELL_TYPE_DEFINITION);
