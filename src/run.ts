@@ -29,10 +29,10 @@ export async function runStarboardPython(
   outputElement.hook(runtime.consoleCatcher);
 
   const htmlOutput = document.createElement("div");
-  const lithtml = runtime.exports.libraries.LitHtml;
-  const html = lithtml.html;
+  const lit = runtime.exports.libraries.lit;
+  const html = lit.html;
 
-  lithtml.render(html`${outputElement}${htmlOutput}`, renderOutputIntoElement);
+  lit.render(html`${outputElement}${htmlOutput}`, renderOutputIntoElement);
   setGlobalPythonHtmlOutputElement(htmlOutput);
 
   await pyoPromise;

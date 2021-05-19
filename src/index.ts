@@ -5,7 +5,7 @@ import {
   Cell,
   StarboardPlugin,
 } from "starboard-notebook/dist/src/types";
-import * as lithtmlImport from "lit-html";
+import * as litImport from "lit";
 import { Runtime, ControlButton } from "starboard-notebook/dist/src/types";
 
 import { Pyodide as PyodideType } from "./typings";
@@ -30,11 +30,10 @@ export function registerPython(runtime: Runtime) {
   setupPythonSupport();
 
   /* These globals are exposed by Starboard Notebook. We can re-use them so we don't have to bundle them again. */
-  const lithtml = runtime.exports.libraries.LitHtml;
+  const lit = runtime.exports.libraries.lit;
 
   const StarboardTextEditor = runtime.exports.elements.StarboardTextEditor;
   const cellControlsTemplate = runtime.exports.templates.cellControls;
-  const icons = runtime.exports.templates.icons;
 
   const PYTHON_CELL_TYPE_DEFINITION: CellTypeDefinition = {
     name: "Python",
@@ -58,8 +57,8 @@ export function registerPython(runtime: Runtime) {
       this.runtime = runtime;
     }
 
-    private getControls(): lithtmlImport.TemplateResult | string {
-      const icon = this.isCurrentlyRunning ? icons.ClockIcon : icons.PlayCircleIcon;
+    private getControls(): litImport.TemplateResult | string {
+      const icon = this.isCurrentlyRunning ? "bi bi-hourglass" : "bi bi-play-circle";
       const tooltip = this.isCurrentlyRunning ? "Cell is running" : "Run Cell";
       const runButton: ControlButton = {
         icon,
@@ -71,7 +70,7 @@ export function registerPython(runtime: Runtime) {
       if (this.isCurrentlyLoadingPyodide) {
         buttons = [
           {
-            icon: icons.GearsIcon,
+            icon: "bi bi-cloud-arrow-down",
             tooltip: "Downloading and initializing Pyodide",
             callback: () => {
               alert(
@@ -90,7 +89,7 @@ export function registerPython(runtime: Runtime) {
       this.elements = params.elements;
 
       const topElement = this.elements.topElement;
-      lithtml.render(this.getControls(), this.elements.topControlsElement);
+      lit.render(this.getControls(), this.elements.topControlsElement);
 
       this.editor = new StarboardTextEditor(this.cell, this.runtime, { language: "python" });
       topElement.appendChild(this.editor);
@@ -106,7 +105,7 @@ export function registerPython(runtime: Runtime) {
       if (getPyodideLoadingStatus() !== "ready") {
         this.isCurrentlyLoadingPyodide = true;
       }
-      lithtml.render(this.getControls(), this.elements.topControlsElement);
+      lit.render(this.getControls(), this.elements.topControlsElement);
 
       try {
         const val = await runStarboardPython(this.runtime, codeToRun, this.elements.bottomElement);
@@ -114,7 +113,7 @@ export function registerPython(runtime: Runtime) {
         this.isCurrentlyLoadingPyodide = false;
         if (this.lastRunId === currentRunId) {
           this.isCurrentlyRunning = false;
-          lithtml.render(this.getControls(), this.elements.topControlsElement);
+          lit.render(this.getControls(), this.elements.topControlsElement);
         }
         return val;
       } catch (e) {
@@ -122,7 +121,7 @@ export function registerPython(runtime: Runtime) {
         this.isCurrentlyLoadingPyodide = false;
         if (this.lastRunId === currentRunId) {
           this.isCurrentlyRunning = false;
-          lithtml.render(this.getControls(), this.elements.topControlsElement);
+          lit.render(this.getControls(), this.elements.topControlsElement);
         }
         throw e;
       }
@@ -137,8 +136,8 @@ export function registerPython(runtime: Runtime) {
     }
 
     clear() {
-      const html = lithtml.html;
-      lithtml.render(html``, this.elements.bottomElement);
+      const html = lit.html;
+      lit.render(html``, this.elements.bottomElement);
     }
   }
 

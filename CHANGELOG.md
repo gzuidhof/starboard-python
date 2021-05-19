@@ -1,3 +1,6 @@
+## 0.6.6
+* Update to Starboard Notebook 0.10.0, removing some dependencies on deprecated functionality and updating the icons.
+
 ## 0.6.5
 * Update to Starboard notebook 0.9.3 which requires a `clear()` method for cell handlers.
 
