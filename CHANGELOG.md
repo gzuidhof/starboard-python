@@ -1,3 +1,6 @@
+## 0.6.7
+* Make changes required for Starboard notebook 0.12.0 (moving away from emit to `runtime.controls` directly).
+
 ## 0.6.6
 * Update to Starboard Notebook 0.10.0, removing some dependencies on deprecated functionality and updating the icons.
 

@@ -63,7 +63,8 @@ export function registerPython(runtime: Runtime) {
       const runButton: ControlButton = {
         icon,
         tooltip,
-        callback: () => this.runtime.controls.emit({ id: this.cell.id, type: "RUN_CELL" }),
+        //@ts-ignore
+        callback: () => this.runtime.controls.runCell({ id: this.cell.id }),
       };
       let buttons = [runButton];
 
