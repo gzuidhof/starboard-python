@@ -3,10 +3,22 @@ export declare type Pyodide = {
   runPythonAsync(code: string, messageCallback?: (msg: any) => void, errorCallback?: (err: any) => void): Promise<any>;
   loadPackage(names: string, messageCallback?: (msg: any) => void, errorCallback?: (err: any) => void): Promise<any>;
   loadedPackages(packages: string[]): any;
-  globals: any;
+  globals: PyProxy;
 
   version: () => string;
   checkABI: any;
   _module: any;
   isPyProxy(v: any): boolean;
+};
+
+// https://pyodide.org/en/stable/usage/api/js-api.html
+export declare type PyProxy = {
+  type?: string;
+  length?: any;
+  delete?: (key: any) => void;
+  get?: (key: any) => any;
+  has?: (key: any) => boolean;
+  set?: (key: any, value: any) => void;
+  destroy?: () => void;
+  toJs?: (depth?: number) => any;
 };

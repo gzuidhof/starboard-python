@@ -1,12 +1,14 @@
 // @ts-ignore
-import css from "./pyodide-styles.css";
-
-import "./pyodide";
+import css from "./pyodide/pyodide-styles.css";
 import { getPluginOpts } from "./opts";
+import { v4 as uuidv4 } from "uuid";
+import type { WorkerMessage, WorkerResponse } from "./worker/worker-message";
+import { assertUnreachable } from "./util";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted";
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
-let pyodideLoadSingleton: Promise<void> | undefined = undefined;
+let pyodideLoadSingleton: Promise<Worker> | undefined = undefined;
+const runningCode = new Map<string, (value: any) => void>();
 
 // A global value that is the current HTML element to attach matplotlib figures to..
 // perhaps this can be done in a cleaner way.
@@ -54,32 +56,90 @@ export async function loadPyodide(artifactsUrl?: string) {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
   loadingStatus = "loading";
-  const artifactsURL =
-    artifactsUrl ||
-    getPluginOpts().artifactsUrl ||
-    (window as any).pyodideArtifactsUrl ||
-    "https://cdn.jsdelivr.net/pyodide/v0.17.0/full/";
-  pyodideLoadSingleton = (window as any).loadPyodide({ indexURL: artifactsURL }) as Promise<void>;
+  const worker = new Worker(new URL("pyodide-worker.js", import.meta.url));
+  worker.postMessage({
+    type: "initialize",
+    options: {
+      artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
+    },
+  } as WorkerMessage);
+
+  pyodideLoadSingleton = new Promise((resolve, reject) => {
+    // Only the resolve case is handled for now
+    worker.addEventListener(
+      "message",
+      (ev) => {
+        if (ev.data && (ev.data as WorkerResponse).type === "initialized") {
+          resolve(worker);
+        }
+      },
+      {
+        once: true,
+      }
+    );
+  });
+
+  worker.addEventListener("message", (e) => {
+    if (!e.data) return;
+    const data = e.data as WorkerResponse;
+    switch (data.type) {
+      case "initialized": {
+        // Ignore
+        break;
+      }
+      case "result": {
+        const callback = runningCode.get(data.id);
+        if (!callback) {
+          console.warn("Missing Python callback");
+        } else {
+          callback(data.value);
+        }
+        break;
+      }
+      case "console": {
+        // TODO: Maybe this should directly hook into the console catcher?
+        (console as any)?.[data.method](...data.data);
+        break;
+      }
+      default: {
+        assertUnreachable(data);
+      }
+    }
+  });
+
   await pyodideLoadSingleton;
   loadingStatus = "ready";
-
-  // TODO: perhaps we can do this in a cleaner way by passing an output element to runPython or something.
-  (window.pyodide as any).matplotlibHelpers = {
-    createElement: (tagName: string) => {
-      const elem = document.createElement(tagName);
-      if (!CURRENT_HTML_OUTPUT_ELEMENT) {
-        console.log("HTML output from pyodide but nowhere to put it, will append to body instead.");
-        document.querySelector("body")!.appendChild(elem);
-      } else {
-        CURRENT_HTML_OUTPUT_ELEMENT.appendChild(elem);
-      }
-      return elem;
-    },
-  };
 
   return pyodideLoadSingleton;
 }
 
 export function getPyodideLoadingStatus() {
   return loadingStatus;
+}
+
+export async function runPythonAsync(code: string, data?: { [key: string]: any }) {
+  if (!pyodideLoadSingleton) return;
+
+  const id = uuidv4();
+
+  const worker = await pyodideLoadSingleton;
+
+  return new Promise((resolve, reject) => {
+    runningCode.set(id, (result) => {
+      resolve(result);
+      runningCode.delete(id);
+    });
+
+    try {
+      console.log(data);
+      worker.postMessage({
+        type: "run",
+        id: id,
+        code: code,
+        data: data,
+      } as WorkerMessage);
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
