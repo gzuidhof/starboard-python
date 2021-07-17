@@ -45,6 +45,13 @@ import { patchMatplotlib } from "./matplotlib";
    if (!baseURL.endsWith("/")) {
      baseURL += '/';
    }
+
+   // Inject custom stdin/stdout/stderr
+   if(config.fs) {
+    Module.preRun = [function() {
+      Module.FS.init(config.fs.stdin, config.fs.stdout, config.fs.stderr);
+    }];
+  }
  
    ////////////////////////////////////////////////////////////
    // Package loading

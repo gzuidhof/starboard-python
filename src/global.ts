@@ -56,6 +56,7 @@ export async function loadPyodide(artifactsUrl?: string) {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
   loadingStatus = "loading";
+  // TODO: Make the worker constructor configureable (plugin settings)
   const worker = new Worker(new URL("pyodide-worker.js", import.meta.url));
   worker.postMessage({
     type: "initialize",
@@ -123,7 +124,6 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
   const id = uuidv4();
 
   const worker = await pyodideLoadSingleton;
-
   return new Promise((resolve, reject) => {
     runningCode.set(id, (result) => {
       resolve(result);
@@ -139,7 +139,10 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
         data: data,
       } as WorkerMessage);
     } catch (e) {
+      // It failed to be copied. Usually that means that the object cannot be cloned that easily.
+      // TODO: Handle this more gracefully
       reject(e);
+      runningCode.delete(id);
     }
   });
 }
