@@ -79,32 +79,19 @@ export async function loadPyodide(artifactsUrl?: string) {
   const asyncMemory = getAsyncMemory();
   let dataToTransfer: Uint8Array | undefined = undefined;
 
-  worker.postMessage({
-    type: "initialize",
-    options: {
-      artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
-      lockBuffer: asyncMemory?.sharedLock,
-      dataBuffer: asyncMemory?.sharedMemory,
-    },
-  } as WorkerMessage);
-
   pyodideLoadSingleton = new Promise((resolve, reject) => {
     // Only the resolve case is handled for now
-    worker.addEventListener(
-      "message",
-      (ev) => {
-        if (ev.data && (ev.data as WorkerResponse).type === "initialized") {
-          resolve(worker);
-        }
-      },
-      {
-        once: true,
+    function handleInitMessage(ev: MessageEvent<any>) {
+      if (ev.data && (ev.data as WorkerResponse).type === "initialized") {
+        worker.removeEventListener("message", handleInitMessage);
+        resolve(worker);
       }
-    );
+    }
+    worker.addEventListener("message", handleInitMessage);
   });
 
   worker.addEventListener("message", (e) => {
-    if (!e.data) return;
+    if (!e.data || e.data.type === undefined) return;
     const data = e.data as WorkerResponse;
     switch (data.type) {
       case "initialized": {
@@ -153,6 +140,15 @@ export async function loadPyodide(artifactsUrl?: string) {
       }
     }
   });
+
+  worker.postMessage({
+    type: "initialize",
+    options: {
+      artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
+      lockBuffer: asyncMemory?.sharedLock,
+      dataBuffer: asyncMemory?.sharedMemory,
+    },
+  } as WorkerMessage);
 
   await pyodideLoadSingleton;
   loadingStatus = "ready";

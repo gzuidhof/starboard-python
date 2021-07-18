@@ -213,11 +213,9 @@ function getInput() {
 }
 
 function sendConsole({ method, args }: { method: string; args: string[] }) {
-  setTimeout(() => {
-    self.postMessage({
-      type: "console",
-      method: method,
-      data: args,
-    } as WorkerResponse);
-  }, 100);
+  self.postMessage({
+    type: "console",
+    method: method,
+    data: args,
+  } as WorkerResponse);
 }
