@@ -20,7 +20,7 @@ import "../pyodide/pyodide";
 import type { Pyodide as PyodideType } from "../pyodide/typings";
 import { assertUnreachable } from "../util";
 import { WorkerMessage, WorkerResponse } from "./worker-message";
-import { intArrayFromString } from "./emscripten-utils";
+import { intArrayFromString, UTF8ArrayToString } from "./emscripten-utils";
 import { AsyncMemory } from "./async-memory";
 import { deserialize } from "./serialize-object";
 
@@ -72,39 +72,6 @@ declare global {
  * https://github.com/pyodide/pyodide/issues/1504
  */
 
-// TODO: Good enough for now, but I'd like to replace it with a console catcher
-const originalConsole = self.console;
-// TODO: Try to print any python objects that aren't already strings!
-// (Can it even happen that this will be called with something that's not a string?)
-/*self.console = new Proxy(self.console, {
-  get(target, prop, receiver) {
-    const method = (target as any)[prop];
-    if (method) {
-      return function (...args: any[]) {
-        self.postMessage({
-          type: "console",
-          method: prop,
-          data: args,
-        } as WorkerResponse);
-      };
-    }
-  },
-});*/
-/*
-const consoleCatcher = new ConsoleCatcher(self.console);
-function consoleMessageCallback(message: { method: string; data: any[] }) {
-  try {
-    self.postMessage({
-      type: "console",
-      method: message.method,
-      // TODO: Better copying
-      data: JSON.parse(JSON.stringify(message.data)),
-    } as WorkerResponse);
-  } catch (e) {
-    consoleCatcher.getRawConsoleMethods().error(e, "with data", message.data);
-  }
-}*/
-
 let pyodideLoadSingleton: Promise<void> | undefined = undefined;
 let asyncMemory: AsyncMemory | undefined = undefined;
 
@@ -115,7 +82,6 @@ self.addEventListener("message", async (e: MessageEvent) => {
     case "initialize": {
       if (pyodideLoadSingleton !== undefined) return;
 
-      //consoleCatcher.hook(consoleMessageCallback);
       let artifactsURL = data.options.artifactsUrl || "https://cdn.jsdelivr.net/pyodide/v0.17.0/full/";
       if (!artifactsURL.endsWith("/")) artifactsURL += "/";
 
@@ -143,41 +109,16 @@ self.addEventListener("message", async (e: MessageEvent) => {
         },
       };
 
-      let input: number[] = [];
-      let inputIndex = -1; // -1 means that we just returned null
-      const fs = {
-        stdin() {
-          console.log("stdin called", inputIndex, input);
-          if (inputIndex === -1) {
-            input = intArrayFromString(getInput(), true, 0); // getInput() will always return a string ending in "\n"
-            inputIndex = 0;
-          }
-
-          if (inputIndex < input.length) {
-            let character = input[inputIndex];
-            inputIndex++;
-            return character;
-          } else {
-            inputIndex = -1;
-            return null;
-          }
-        },
-        stdout: null, // Keep as default
-        stderr: null, // Keep as default
-      };
+      const fs = createFs();
 
       pyodideLoadSingleton = self.loadPyodide({ indexURL: artifactsURL, fs: fs }).then(() => {
         self.postMessage({
           type: "initialized",
         } as WorkerResponse);
-        //consoleCatcher.unhook(consoleMessageCallback);
       });
       break;
     }
     case "run": {
-      // TODO: Maybe have our own fancy runner https://github.com/hoodmane/worker-pyodide-console/blob/c681fe223e97fa45a4b8a497b1476459875267df/code.py
-
-      //consoleCatcher.hook(consoleMessageCallback);
       console.log("Running ", data);
       if (self.pyodide.globals.set) {
         Object.entries(data.data).forEach(([key, value]) => {
@@ -195,7 +136,6 @@ self.addEventListener("message", async (e: MessageEvent) => {
         id: data.id,
         value: result,
       } as WorkerResponse);
-      //consoleCatcher.unhook(consoleMessageCallback);
       break;
     }
     default: {
@@ -203,6 +143,59 @@ self.addEventListener("message", async (e: MessageEvent) => {
     }
   }
 });
+
+function createFs() {
+  let input: number[] = [];
+  let inputIndex = -1; // -1 means that we just returned null
+  let output: number[] = [];
+  let errorOutput: number[] = [];
+  const LINE_FEED = 10;
+  const fs = {
+    stdin() {
+      if (inputIndex === -1) {
+        input = intArrayFromString(getInput(), true, 0); // getInput() will always return a string ending in "\n"
+        inputIndex = 0;
+      }
+
+      if (inputIndex < input.length) {
+        let character = input[inputIndex];
+        inputIndex++;
+        return character;
+      } else {
+        inputIndex = -1;
+        return null;
+      }
+    },
+    stdout(data: number | null) {
+      console.log(arguments);
+      if (data === null || data === LINE_FEED) {
+        // flush
+        const text = UTF8ArrayToString(output, 0, output.length);
+        sendConsole({
+          method: "log",
+          args: [text],
+        });
+        output.length = 0;
+      } else {
+        output.push(data);
+      }
+    },
+    stderr: null /*(data: number | null) {
+      if (data === null || data === LINE_FEED) {
+        // flush
+        const text = UTF8ArrayToString(errorOutput, 0, errorOutput.length);
+        sendConsole({
+          method: "error",
+          args: [text],
+        });
+        errorOutput.length = 0;
+      } else {
+        errorOutput.push(data);
+      }
+    }*/,
+  };
+  return fs;
+}
 
 function getInput() {
   if (asyncMemory === undefined) return "\n";

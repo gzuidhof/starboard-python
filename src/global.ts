@@ -177,7 +177,6 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
     });
 
     try {
-      console.log(data);
       worker.postMessage({
         type: "run",
         id: id,
@@ -185,6 +184,7 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
         data: data,
       } as WorkerMessage);
     } catch (e) {
+      console.warn(e, data);
       // It failed to be copied. Usually that means that the object cannot be cloned that easily.
       // TODO: Handle this more gracefully
       reject(e);
