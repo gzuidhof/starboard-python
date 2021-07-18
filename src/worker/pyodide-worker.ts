@@ -144,18 +144,22 @@ self.addEventListener("message", async (e: MessageEvent) => {
       };
 
       let input: number[] = [];
-      let inputIndex = 0;
+      let inputIndex = -1; // -1 means that we just returned null
       const fs = {
         stdin() {
-          console.log("stdin called");
-          if (inputIndex >= input.length) {
+          console.log("stdin called", inputIndex, input);
+          if (inputIndex === -1) {
+            input = intArrayFromString(getInput(), true, 0); // getInput() will always return a string ending in "\n"
             inputIndex = 0;
-            input = intArrayFromString(getInput(), true, 0);
-            return null;
-          } else {
+          }
+
+          if (inputIndex < input.length) {
             let character = input[inputIndex];
             inputIndex++;
             return character;
+          } else {
+            inputIndex = -1;
+            return null;
           }
         },
         stdout: null, // Keep as default
@@ -231,7 +235,7 @@ function getInput() {
   // Read the result
   const result = deserialize(asyncMemory.memory, numberOfBytes);
 
-  return result + "";
+  return result ? result + "\n" : "\n";
 }
 
 function sendConsole({ method, args }: { method: string; args: string[] }) {

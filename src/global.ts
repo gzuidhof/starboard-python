@@ -60,7 +60,10 @@ function getAsyncMemory() {
     "Atomics" in globalThis &&
     (globalThis as any)["crossOriginIsolated"] !== false
   ) {
-    const asyncMemory: AsyncMemory = new AsyncMemory(new SharedArrayBuffer(8), new SharedArrayBuffer(100));
+    const asyncMemory: AsyncMemory = new AsyncMemory(
+      new SharedArrayBuffer(8 * Int32Array.BYTES_PER_ELEMENT),
+      new SharedArrayBuffer(100)
+    );
     return asyncMemory;
   } else {
     return null;
