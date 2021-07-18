@@ -4,6 +4,8 @@ import { getPluginOpts } from "./opts";
 import { v4 as uuidv4 } from "uuid";
 import type { WorkerMessage, WorkerResponse } from "./worker/worker-message";
 import { assertUnreachable } from "./util";
+import { AsyncMemory } from "./worker/async-memory";
+import { serialize } from "./worker/serialize-object";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted";
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
@@ -52,16 +54,34 @@ export function setupPythonSupport() {
   setupStatus = "completed";
 }
 
+function getAsyncMemory() {
+  if (
+    "SharedArrayBuffer" in globalThis &&
+    "Atomics" in globalThis &&
+    (globalThis as any)["crossOriginIsolated"] !== false
+  ) {
+    const asyncMemory: AsyncMemory = new AsyncMemory(new SharedArrayBuffer(8), new SharedArrayBuffer(100));
+    return asyncMemory;
+  } else {
+    return null;
+  }
+}
+
 export async function loadPyodide(artifactsUrl?: string) {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
   loadingStatus = "loading";
   // TODO: Make the worker constructor configureable (plugin settings)
   const worker = new Worker(new URL("pyodide-worker.js", import.meta.url));
+  const asyncMemory = getAsyncMemory();
+  let dataToTransfer: Uint8Array | undefined = undefined;
+
   worker.postMessage({
     type: "initialize",
     options: {
       artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
+      lockBuffer: asyncMemory?.sharedLock,
+      dataBuffer: asyncMemory?.sharedMemory,
     },
   } as WorkerMessage);
 
@@ -100,6 +120,29 @@ export async function loadPyodide(artifactsUrl?: string) {
       case "console": {
         // TODO: Maybe this should directly hook into the console catcher?
         (console as any)?.[data.method](...data.data);
+        break;
+      }
+      case "stdin": {
+        if (!asyncMemory) return; // Stdin is unsupported
+        const userInput = prompt("Input"); // TODO: Replace this with a proper input thingy
+        dataToTransfer = serialize(userInput);
+        asyncMemory.writeSize(dataToTransfer.buffer.byteLength);
+        asyncMemory.unlockSize();
+        break;
+      }
+      case "data-buffer": {
+        if (!asyncMemory) break;
+        // Resize buffer
+        if (data.dataBuffer) {
+          asyncMemory.sharedMemory = data.dataBuffer;
+          asyncMemory.memory = new Uint8Array(asyncMemory.sharedMemory);
+        }
+        // Write data
+        if (dataToTransfer) {
+          asyncMemory.memory.set(dataToTransfer);
+          dataToTransfer = undefined;
+        }
+        asyncMemory.unlockWorker();
         break;
       }
       default: {

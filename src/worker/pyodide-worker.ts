@@ -21,6 +21,8 @@ import type { Pyodide as PyodideType } from "../pyodide/typings";
 import { assertUnreachable } from "../util";
 import { WorkerMessage, WorkerResponse } from "./worker-message";
 import { intArrayFromString } from "./emscripten-utils";
+import { AsyncMemory } from "./async-memory";
+import { deserialize } from "./serialize-object";
 
 // TODO: My lord, is this legal?
 // TODO: https://github.com/gzuidhof/console-feed
@@ -104,6 +106,7 @@ function consoleMessageCallback(message: { method: string; data: any[] }) {
 }*/
 
 let pyodideLoadSingleton: Promise<void> | undefined = undefined;
+let asyncMemory: AsyncMemory | undefined = undefined;
 
 self.addEventListener("message", async (e: MessageEvent) => {
   if (!e.data) return;
@@ -115,7 +118,15 @@ self.addEventListener("message", async (e: MessageEvent) => {
       //consoleCatcher.hook(consoleMessageCallback);
       let artifactsURL = data.options.artifactsUrl || "https://cdn.jsdelivr.net/pyodide/v0.17.0/full/";
       if (!artifactsURL.endsWith("/")) artifactsURL += "/";
+
       /* self.importScripts(artifactsURL + "pyodide.js"); // Not used, we're importing our own pyodide.ts*/
+
+      if (data.options.lockBuffer) {
+        asyncMemory = new AsyncMemory(data.options.lockBuffer, data.options.dataBuffer);
+      } else {
+        console.warn("Missing lock buffer, some Pyodide functionality will be restricted");
+      }
+
       (self.pyodide as any).matplotlibHelpers = {
         createElement: (tagName: string) => {
           // TODO:
@@ -132,18 +143,19 @@ self.addEventListener("message", async (e: MessageEvent) => {
         },
       };
 
-      let hardcodedOutput = intArrayFromString("cat\n", true, 0);
-      let c = 0;
+      let input: number[] = [];
+      let inputIndex = 0;
       const fs = {
         stdin() {
           console.log("stdin called");
-          if (c >= hardcodedOutput.length) {
-            c = 0;
+          if (inputIndex >= input.length) {
+            inputIndex = 0;
+            input = intArrayFromString(getInput(), true, 0);
             return null;
           } else {
-            let output = hardcodedOutput[c];
-            c++;
-            return output; // TODO: The 'intArrayFromString' should happen inside of pyodide
+            let character = input[inputIndex];
+            inputIndex++;
+            return character;
           }
         },
         stdout: null, // Keep as default
@@ -160,12 +172,6 @@ self.addEventListener("message", async (e: MessageEvent) => {
     }
     case "run": {
       // TODO: Maybe have our own fancy runner https://github.com/hoodmane/worker-pyodide-console/blob/c681fe223e97fa45a4b8a497b1476459875267df/code.py
-
-      /*
-(self as any)["input"] = function (...args: any[]) {
-  console.warn(args);
-};
-//  FS.streams[3]*/
 
       //consoleCatcher.hook(consoleMessageCallback);
       console.log("Running ", data);
@@ -193,3 +199,45 @@ self.addEventListener("message", async (e: MessageEvent) => {
     }
   }
 });
+
+function getInput() {
+  if (asyncMemory === undefined) return "\n";
+
+  // TODO: Maybe we should also support the service worker approach
+  // https://glitch.com/edit/#!/sleep-sw?path=worker.js%3A27%3A40
+
+  // Lock the shared memory
+  asyncMemory.lock();
+  // Request info main thread
+  self.postMessage({
+    type: "stdin",
+  } as WorkerResponse);
+  // Wait (blocking)
+  asyncMemory.waitForSize();
+  // Ensure buffer size
+  const numberOfBytes = asyncMemory.readSize();
+  if (numberOfBytes > asyncMemory.sharedMemory.byteLength) {
+    self.postMessage({
+      type: "data-buffer",
+      dataBuffer: asyncMemory.resize(numberOfBytes),
+    } as WorkerResponse);
+  } else {
+    self.postMessage({
+      type: "data-buffer",
+    } as WorkerResponse);
+  }
+  // Wait (blocking)
+  asyncMemory.waitForWorker();
+  // Read the result
+  const result = deserialize(asyncMemory.memory, numberOfBytes);
+
+  return result + "";
+}
+
+function sendConsole({ method, args }: { method: string; args: string[] }) {
+  self.postMessage({
+    type: "console",
+    method: method,
+    data: args,
+  } as WorkerResponse);
+}

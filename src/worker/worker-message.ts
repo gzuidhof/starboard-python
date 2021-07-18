@@ -8,6 +8,8 @@ export type WorkerMessage =
       type: "initialize";
       options: {
         artifactsUrl?: string;
+        lockBuffer?: SharedArrayBuffer;
+        dataBuffer?: SharedArrayBuffer;
         // Other options like the packages to start with can be passed here
       };
     }
@@ -33,4 +35,11 @@ export type WorkerResponse =
       type: "console";
       method: string;
       data: any[];
+    }
+  | {
+      type: "stdin";
+    }
+  | {
+      type: "data-buffer";
+      dataBuffer?: SharedArrayBuffer;
     };

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-export function intArrayFromString(stringy: string, dontAddNull: boolean, length: number) {
+export function intArrayFromString(stringy: string, dontAddNull: boolean, length: number): number[] {
   var len = length > 0 ? length : lengthBytesUTF8(stringy) + 1;
   var u8array = new Array(len);
   var numBytesWritten = stringToUTF8Array(stringy, u8array, 0, u8array.length);
