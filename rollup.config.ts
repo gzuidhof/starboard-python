@@ -37,7 +37,7 @@ export default [
     plugins: [
       resolve(),
       typescript({
-        include: ["./src/*.ts"],
+        include: ["./src/**/*.ts"],
       }),
       commonjs(),
       css(),
