@@ -34,11 +34,9 @@ declare global {
     pyodide: PyodideType;
     loadPyodide(config: {
       indexURL: string;
-      fs?: {
-        stdin: null | (() => any | null);
-        stdout: null | ((value: any | null) => void);
-        stderr: null | ((value: any | null) => void);
-      };
+      stdin?: () => any | null;
+      print?: (text: string) => void;
+      printErr?: (text: string) => void;
     }): Promise<void>;
   }
 }
@@ -109,13 +107,28 @@ self.addEventListener("message", async (e: MessageEvent) => {
         },
       };
 
-      const fs = createFs();
-
-      pyodideLoadSingleton = self.loadPyodide({ indexURL: artifactsURL, fs: fs }).then(() => {
-        self.postMessage({
-          type: "initialized",
-        } as WorkerResponse);
-      });
+      pyodideLoadSingleton = self
+        .loadPyodide({
+          indexURL: artifactsURL,
+          stdin: createStdin(),
+          print: (text) => {
+            sendConsole({
+              method: "log",
+              args: [text + ""],
+            });
+          },
+          printErr: (text) => {
+            sendConsole({
+              method: "error",
+              args: [text + ""],
+            });
+          },
+        })
+        .then(() => {
+          self.postMessage({
+            type: "initialized",
+          } as WorkerResponse);
+        });
       break;
     }
     case "run": {
@@ -144,57 +157,25 @@ self.addEventListener("message", async (e: MessageEvent) => {
   }
 });
 
-function createFs() {
+function createStdin() {
   let input: number[] = [];
   let inputIndex = -1; // -1 means that we just returned null
-  let output: number[] = [];
-  let errorOutput: number[] = [];
-  const LINE_FEED = 10;
-  const fs = {
-    stdin() {
-      if (inputIndex === -1) {
-        input = intArrayFromString(getInput(), true, 0); // getInput() will always return a string ending in "\n"
-        inputIndex = 0;
-      }
+  function stdin() {
+    if (inputIndex === -1) {
+      input = intArrayFromString(getInput(), true, 0); // getInput() will always return a string ending in "\n"
+      inputIndex = 0;
+    }
 
-      if (inputIndex < input.length) {
-        let character = input[inputIndex];
-        inputIndex++;
-        return character;
-      } else {
-        inputIndex = -1;
-        return null;
-      }
-    },
-    stdout(data: number | null) {
-      console.log(arguments);
-      if (data === null || data === LINE_FEED) {
-        // flush
-        const text = UTF8ArrayToString(output, 0, output.length);
-        sendConsole({
-          method: "log",
-          args: [text],
-        });
-        output.length = 0;
-      } else {
-        output.push(data);
-      }
-    },
-    stderr: null /*(data: number | null) {
-      if (data === null || data === LINE_FEED) {
-        // flush
-        const text = UTF8ArrayToString(errorOutput, 0, errorOutput.length);
-        sendConsole({
-          method: "error",
-          args: [text],
-        });
-        errorOutput.length = 0;
-      } else {
-        errorOutput.push(data);
-      }
-    }*/,
-  };
-  return fs;
+    if (inputIndex < input.length) {
+      let character = input[inputIndex];
+      inputIndex++;
+      return character;
+    } else {
+      inputIndex = -1;
+      return null;
+    }
+  }
+  return stdin;
 }
 
 function getInput() {

@@ -47,12 +47,18 @@ import { patchMatplotlib } from "./matplotlib";
    }
 
    // Inject custom stdin/stdout/stderr
-   if(config.fs) {
+   if(config.stdin) {
     Module.preRun = [function() {
-      Module.FS.init(config.fs.stdin, config.fs.stdout, config.fs.stderr);
+      Module.FS.init(config.stdin, null, null);
     }];
   }
- 
+  if(config.print) {
+    Module.print = config.print;
+  }
+  if(config.printErr) {
+    Module.printErr = config.printErr;
+  }
+
    ////////////////////////////////////////////////////////////
    // Package loading
    const DEFAULT_CHANNEL = "default channel";
