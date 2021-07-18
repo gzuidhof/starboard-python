@@ -1,6 +1,6 @@
-// https://v8.dev/features/atomics
-
 /**
+ * One-way memory, can block a web worker until data from the main thread arrives.
+ *
  * Web Worker Usage:
  * 1. Lock "web worker"
  * 2. Lock "shared memory"
@@ -23,6 +23,7 @@
  * 8. Unlock "web worker" (Worker does stuff)
  */
 export class AsyncMemory {
+  // Reference: https://v8.dev/features/atomics
   static LOCK_WORKER_INDEX = 0;
   static LOCK_SIZE_INDEX = 2;
   static SIZE_INDEX = 4;
