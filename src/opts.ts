@@ -1,5 +1,6 @@
 export type StarboardPythonPluginOpts = {
   artifactsUrl?: string;
+  workerUrl?: string;
 };
 
 // Global singleton

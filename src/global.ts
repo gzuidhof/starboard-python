@@ -70,12 +70,11 @@ function getAsyncMemory() {
   }
 }
 
-export async function loadPyodide(artifactsUrl?: string) {
+export async function loadPyodide(artifactsUrl?: string, workerUrl?: string) {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
   loadingStatus = "loading";
-  // TODO: Make the worker constructor configureable (plugin settings)
-  const worker = new Worker(new URL("pyodide-worker.js", import.meta.url));
+  const worker = workerUrl ? new Worker(workerUrl) : new Worker(new URL("pyodide-worker.js", import.meta.url));
   const asyncMemory = getAsyncMemory();
   let dataToTransfer: Uint8Array | undefined = undefined;
 
