@@ -8,6 +8,7 @@
 // - Eval code? https://github.com/pyodide/pyodide/pull/1083
 // - design this so that multiple thingies can access the same kernel. Everyone is responsible for their own 'scope' and their own variables, even if this will never work 100%
 // - it should be possible to define multiple 'kernels' that run in the same worker
+// - test matplotlib, pretty sure that it currently doesn't work
 /// <reference no-default-lib="true"/>
 /// <reference lib="es2020" />
 /// <reference lib="WebWorker" />
@@ -84,6 +85,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
         },
       };
 
+      // TODO: deep proxy https://github.com/samvv/js-proxy-deep
       const globalProxy = new Proxy(globalThis, {
         get(target, prop, receiver) {
           // https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
@@ -131,9 +133,13 @@ self.addEventListener("message", async (e: MessageEvent) => {
         setPrototypeOf(target, proto) {
           return Reflect.setPrototypeOf(target, proto);
         },*/
-        /*apply: function(target, thisArg, argumentsList) {
+        // For function objects
+        /*apply(target, thisArg, argumentsList) {
           return Reflect.apply(target, thisArg, argumentsList);
-        },*/
+        },
+        construct(target, argumentsList, newTarget) {
+          return Reflect.construct(target, argumentsList, newTarget)
+        }*/
       });
 
       pyodideLoadSingleton = self

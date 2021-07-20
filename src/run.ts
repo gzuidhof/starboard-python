@@ -44,9 +44,7 @@ export async function runStarboardPython(
   let val = undefined;
   let error: any = undefined;
   try {
-    pythonRunChain = runPythonAsync(codeToRun, {
-      $_: window.$_,
-    });
+    pythonRunChain = runPythonAsync(codeToRun);
     val = await pythonRunChain;
     window.$_ = val;
 
