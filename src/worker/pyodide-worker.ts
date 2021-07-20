@@ -17,7 +17,7 @@ import "../pyodide/pyodide";
 import type { Pyodide as PyodideType } from "../pyodide/typings";
 import { assertUnreachable } from "../util";
 import { WorkerMessage, WorkerResponse } from "./worker-message";
-import { intArrayFromString, UTF8ArrayToString } from "./emscripten-utils";
+import { intArrayFromString } from "./emscripten-utils";
 import { AsyncMemory } from "./async-memory";
 import { deserialize } from "./serialize-object";
 
