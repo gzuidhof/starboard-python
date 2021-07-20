@@ -6,6 +6,7 @@ import type { WorkerMessage, WorkerResponse } from "./worker/worker-message";
 import { assertUnreachable } from "./util";
 import { AsyncMemory } from "./worker/async-memory";
 import { serialize } from "./worker/serialize-object";
+import type { Runtime } from "starboard-notebook/dist/src/types";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted";
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
@@ -70,7 +71,32 @@ function getAsyncMemory() {
   }
 }
 
-export async function loadPyodide(artifactsUrl?: string, workerUrl?: string) {
+async function convertResult(runtime: Runtime, data: WorkerResponse & { type: "result" }) {
+  if (data.display === "default") {
+    return data.value;
+  } else if (data.display === "html") {
+    let div = document.createElement("div");
+    div.className = "rendered_html cell-output-html";
+    div.appendChild(new DOMParser().parseFromString(data.value, "text/html").body.firstChild as any);
+    return div;
+  } else if (data.display === "latex") {
+    let div = document.createElement("div");
+    div.className = "rendered_html cell-output-html";
+    const katex = await runtime.exports.libraries.async.KaTeX();
+
+    katex.render(data.value.replace(/^(\$?\$?)([^]*)\1$/, "$2"), div, {
+      throwOnError: false,
+      errorColor: " #cc0000",
+      displayMode: true,
+    });
+
+    return div;
+  } else {
+    return data.value;
+  }
+}
+
+export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, workerUrl?: string) {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
   loadingStatus = "loading";
@@ -102,7 +128,7 @@ export async function loadPyodide(artifactsUrl?: string, workerUrl?: string) {
         if (!callback) {
           console.warn("Missing Python callback");
         } else {
-          callback(data.value);
+          convertResult(runtime, data).then(callback);
         }
         break;
       }

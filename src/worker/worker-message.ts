@@ -26,6 +26,7 @@ export type WorkerResponse =
   | {
       type: "result";
       id: string;
+      display?: "default" | "html" | "latex";
       value: any; // TODO: Normal objects can be normal objects, python proxies might need a bit of comlink
     }
   | {

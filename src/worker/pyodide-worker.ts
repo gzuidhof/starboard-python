@@ -172,17 +172,40 @@ self.addEventListener("message", async (e: MessageEvent) => {
     }
     case "run": {
       console.log("Running ", data);
-      let result = await self.pyodide.runPythonAsync(data.code);
-      if (result && result.toJs) {
-        result = result.toJs();
-        result?.destroy();
+      let result = await self.pyodide.runPythonAsync(data.code).catch((error) => error);
+      let displayType: (WorkerResponse & { type: "result" })["display"];
+      console.log("Result ", { result });
+
+      if (self.pyodide.isPyProxy(result)) {
+        if (result._repr_html_ !== undefined) {
+          result = result._repr_html_();
+          displayType = "html";
+        } else if (result._repr_latex_ !== undefined) {
+          result = result._repr_latex_();
+          displayType = "latex";
+        } else {
+          const temp = result;
+          result = result.toJs();
+          temp?.destroy();
+          console.log("Converted result ", { result });
+        }
       }
-      console.log("Result ", result);
-      self.postMessage({
-        type: "result",
-        id: data.id,
-        value: result,
-      } as WorkerResponse);
+
+      try {
+        self.postMessage({
+          type: "result",
+          id: data.id,
+          display: displayType,
+          value: result,
+        } as WorkerResponse);
+      } catch (e) {
+        // Failed to serialize the result
+        self.postMessage({
+          type: "result",
+          id: data.id,
+          value: e + "",
+        } as WorkerResponse);
+      }
       break;
     }
     default: {
@@ -190,6 +213,22 @@ self.addEventListener("message", async (e: MessageEvent) => {
     }
   }
 });
+
+/*
+function destroyToJsResult(x){
+    if(!x){
+        return;
+    }
+    if(pyodide.isPyProxy(x)){
+        x.destroy();
+        return;
+    }
+    if(x[Symbol.iterator]){
+        for(let k of x){
+            destroyToJsResult(k);
+        }
+    }
+}*/
 
 function createStdin() {
   let input: number[] = [];

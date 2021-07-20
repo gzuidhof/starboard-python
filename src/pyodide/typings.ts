@@ -22,5 +22,5 @@ export declare type PyProxy = {
   has?: (key: any) => boolean;
   set?: (key: any, value: any) => void;
   destroy?: () => void;
-  toJs?: (depth?: number) => any;
+  toJs?: (args: any) => any;
 };
