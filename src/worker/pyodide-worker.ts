@@ -252,8 +252,10 @@ function createStdin() {
 }
 
 function getInput() {
-  if (asyncMemory === undefined) return "\n";
-
+  if (asyncMemory === undefined) {
+    console.warn("Stdin/getting user input is unsupported");
+    return "\n";
+  }
   // TODO: Maybe we should also support the service worker approach
   // https://glitch.com/edit/#!/sleep-sw?path=worker.js%3A27%3A40
 

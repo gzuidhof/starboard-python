@@ -137,7 +137,8 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
         break;
       }
       case "stdin": {
-        if (!asyncMemory) return; // Stdin is unsupported
+        if (!asyncMemory) return;
+
         const userInput = prompt("Input"); // TODO: Replace this with a proper input thingy
         dataToTransfer = serialize(userInput);
         asyncMemory.writeSize(dataToTransfer.buffer.byteLength);
