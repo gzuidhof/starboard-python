@@ -107,7 +107,6 @@ export async function loadPyodide(artifactsUrl?: string, workerUrl?: string) {
         break;
       }
       case "console": {
-        // TODO: Maybe this should directly hook into the console catcher?
         (console as any)?.[data.method](...data.data);
         break;
       }
@@ -176,7 +175,6 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
         type: "run",
         id: id,
         code: code,
-        data: data,
       } as WorkerMessage);
     } catch (e) {
       console.warn(e, data);

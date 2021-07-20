@@ -1,17 +1,13 @@
-// This worker will not be inlined. Maybe it should, so that it's easier to consume this package without setting up anything?
-// Inlining a worker would work, however we might want to be able to use this as both a web worker and a shared worker :thinking:
-// btw, the separate entrypoint is so that if we import util.ts, we won't get shared bundles
-// after all, imports in web workers don't work in all browsers just yet...
-// By the way, please design this so that multiple thingies can access the same worker. Everyone is responsible for their own 'scope' and their own variables, even if this will never work 100%
-
-// Questions:
+// TODO: Questions: (guido)
 // - Should the worker stuff be optional?
 // - SharedWorker support? (especially for development?)
-// - Interrupting? (Make sure to enable COOP/COEP) (Also relevant https://github.com/pyodide/pyodide/pull/852 )
+// - Interrupting? (Also relevant https://github.com/pyodide/pyodide/pull/852 )
 // - Preloading? ( https://github.com/pyodide/pyodide/issues/1576 )
 // - Check out asyncio ( https://github.com/pyodide/pyodide/issues/245 )
 // - Restarting? ( https://github.com/pyodide/pyodide/issues/703 )
 // - Eval code? https://github.com/pyodide/pyodide/pull/1083
+// - design this so that multiple thingies can access the same kernel. Everyone is responsible for their own 'scope' and their own variables, even if this will never work 100%
+// - it should be possible to define multiple 'kernels' that run in the same worker
 /// <reference no-default-lib="true"/>
 /// <reference lib="es2020" />
 /// <reference lib="WebWorker" />
@@ -23,11 +19,6 @@ import { WorkerMessage, WorkerResponse } from "./worker-message";
 import { intArrayFromString, UTF8ArrayToString } from "./emscripten-utils";
 import { AsyncMemory } from "./async-memory";
 import { deserialize } from "./serialize-object";
-
-// TODO: My lord, is this legal?
-// TODO: https://github.com/gzuidhof/console-feed
-// https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm
-// import { ConsoleCatcher } from "starboard-notebook/dist/src/console/console";
 
 declare global {
   interface WorkerGlobalScope {
@@ -41,32 +32,18 @@ declare global {
   }
 }
 
+// TODO:
+// document that COOP/COEP is required
+
 /**
+ * TODO:
  * # Async Python research
- * ## pyodide-async
- * It has an autotranslator for basic synchronous code including sleep, which converts it to async.
- * This might be a bit fragile, I haven’t really tested.
- * https://github.com/pyodide/pyodide/issues/97#issuecomment-730561736
- * https://joemarshall.github.io/pyodide-async/
  * ## Interrupt execution
  * sys.settrace() and SharedArrayBuffer
  * https://github.com/pyodide/pyodide/issues/676
- * ## Pyodide console
- * https://github.com/hoodmane/worker-pyodide-console
- * ## Atomics.wait alternatives
- * https://github.com/pyodide/pyodide/issues/1219#issuecomment-776369436
- * https://github.com/pyodide/pyodide/issues/1545#issuecomment-828659003
- * needed if we want to support Safari
- * note: to get a result, one can also do a busy loop after an atomic wait
- * ## Unthrow
- * magical piece of magic to rewind Python to where it used to be
- * https://github.com/pyodide/pyodide/issues/1219#issuecomment-824297183
- * https://github.com/pyodide/pyodide/issues/1545#issuecomment-828659003
  * ## Syncify
  * https://github.com/pyodide/pyodide/pull/1547
  * ## Relevant issues for documentation/commenting
- * Please document everything you did over here
- * https://github.com/pyodide/pyodide/issues/1503
  * https://github.com/pyodide/pyodide/issues/1504
  */
 
@@ -107,6 +84,58 @@ self.addEventListener("message", async (e: MessageEvent) => {
         },
       };
 
+      const globalProxy = new Proxy(globalThis, {
+        get(target, prop, receiver) {
+          // https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
+          // https://stackoverflow.com/questions/37092179/javascript-proxy-objects-dont-work
+          const value = Reflect.get(target, prop, receiver);
+          if (typeof value !== "function") return value;
+
+          return new Proxy(value, {
+            apply(_, thisArg, args) {
+              // this: the object the function was called with. Can be the proxy or something else
+              // receiver: the object the propery was gotten from. Is always the proxy or something inheriting from the proxy
+              // target: the original object
+              const calledWithProxy = thisArg === receiver;
+              return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
+            },
+          });
+        },
+        /*set(target, prop, value, receiver) {
+          return Reflect.set(target, prop, value, receiver);
+        },
+        ownKeys(target) {
+          return Reflect.ownKeys(target);
+        },
+        has(target, prop) {
+          return Reflect.has(target, prop);
+        },
+        defineProperty(target, prop, attributes) {
+          return Reflect.defineProperty(target, prop, attributes);
+        },
+        deleteProperty(target, prop) {
+          return Reflect.deleteProperty(target, prop);
+        },
+        getOwnPropertyDescriptor(target, prop) {
+          return Reflect.getOwnPropertyDescriptor(target, prop);
+        },
+        isExtensible(target) {
+          return Reflect.isExtensible(target);
+        },
+        preventExtensions(target) {
+          return Reflect.preventExtensions(target);
+        },
+        getPrototypeOf(target) {
+          return Reflect.getPrototypeOf(target);
+        },
+        setPrototypeOf(target, proto) {
+          return Reflect.setPrototypeOf(target, proto);
+        },*/
+        /*apply: function(target, thisArg, argumentsList) {
+          return Reflect.apply(target, thisArg, argumentsList);
+        },*/
+      });
+
       pyodideLoadSingleton = self
         .loadPyodide({
           indexURL: artifactsURL,
@@ -125,6 +154,10 @@ self.addEventListener("message", async (e: MessageEvent) => {
           },
         })
         .then(() => {
+          // Fix "from js import ..."
+          /* self.pyodide.unregisterJsModule("js"); // Not needed, since register conveniently overwrites existing things */
+          self.pyodide.registerJsModule("js", globalProxy);
+
           self.postMessage({
             type: "initialized",
           } as WorkerResponse);
@@ -133,11 +166,6 @@ self.addEventListener("message", async (e: MessageEvent) => {
     }
     case "run": {
       console.log("Running ", data);
-      if (self.pyodide.globals.set) {
-        Object.entries(data.data).forEach(([key, value]) => {
-          self.pyodide.globals.set?.(key, value); // Should we clear them afterwards again?
-        });
-      }
       let result = await self.pyodide.runPythonAsync(data.code);
       if (result && result.toJs) {
         result = result.toJs();

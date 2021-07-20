@@ -1,5 +1,7 @@
 // TODO: Find some better way of doing this (maybe by using a library or something)
 // It should be able to handle more than just this
+// Relevant: https://github.com/gzuidhof/console-feed
+// https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm
 
 const decoder = new TextDecoder("utf-8");
 const encoder = new TextEncoder();

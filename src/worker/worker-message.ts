@@ -17,9 +17,6 @@ export type WorkerMessage =
       type: "run";
       id: string;
       code: string;
-      data: {
-        [key: string]: any;
-      };
     };
 
 export type WorkerResponse =

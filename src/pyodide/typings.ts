@@ -4,6 +4,8 @@ export declare type Pyodide = {
   loadPackage(names: string, messageCallback?: (msg: any) => void, errorCallback?: (err: any) => void): Promise<any>;
   loadedPackages(packages: string[]): any;
   globals: PyProxy;
+  unregisterJsModule(name: string): void;
+  registerJsModule(name: string, obj: any): void;
 
   version: () => string;
   checkABI: any;
