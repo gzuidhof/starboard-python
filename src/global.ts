@@ -116,7 +116,10 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
   });
 
   worker.addEventListener("message", (e) => {
-    if (!e.data || e.data.type === undefined) return;
+    if (!e.data) {
+      console.warn("Pyodide worker sent unexpected message:", e);
+      return;
+    }
     const data = e.data as WorkerResponse;
     switch (data.type) {
       case "initialized": {

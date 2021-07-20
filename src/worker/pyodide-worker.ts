@@ -52,7 +52,10 @@ let pyodideLoadSingleton: Promise<void> | undefined = undefined;
 let asyncMemory: AsyncMemory | undefined = undefined;
 
 self.addEventListener("message", async (e: MessageEvent) => {
-  if (!e.data) return;
+  if (!e.data) {
+    console.warn("Pyodide worker received unexpected message:", e);
+    return;
+  }
   const data = e.data as WorkerMessage;
   switch (data.type) {
     case "initialize": {
