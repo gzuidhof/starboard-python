@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { AsyncMemory } from "./async-memory";
-import type { ProxyMessage } from "./object-proxy";
+import { ObjectProxyClient, ProxyMessage } from "./object-proxy";
 
 function assertUnreachable(_x: never): never {
   throw new Error("This case should have never been reached");
@@ -12,9 +12,11 @@ function assertUnreachable(_x: never): never {
 export class WorkerKernelManager {
   readonly kernels = new Map<string, WorkerKernel>();
 
-  readonly mainProxy: Window;
-
   asyncMemory: AsyncMemory | undefined;
+  proxy: ObjectProxyClient | undefined;
+
+  proxiedGlobalThis: undefined | any;
+  proxiedGetInput: undefined | (() => string);
 
   constructor() {
     self.addEventListener("message", async (e: MessageEvent) => {
@@ -27,13 +29,20 @@ export class WorkerKernelManager {
         case "initialize": {
           if (data.asyncMemory) {
             this.asyncMemory = new AsyncMemory(data.asyncMemory.lockBuffer, data.asyncMemory.dataBuffer);
+            this.proxy = new ObjectProxyClient(this.asyncMemory, (message) => {
+              this.postMessage(message);
+            });
+            if (data.globalThisId) {
+              this.proxiedGlobalThis = this.proxy.getObjectProxy(data.globalThisId);
+            }
+            if (data.getInputId) {
+              this.proxiedGetInput = this.proxy.getObjectProxy(data.getInputId);
+            }
+          } else {
+            console.warn("Missing async memory, accessing objects from the main thread will not work");
           }
-          if (data.globalThisId) {
-          }
-          if (data.getInputId) {
-          }
-          // TODO: input function (also an object) id
-          // TODO: window object id
+
+          break;
         }
         case "import-kernel": {
           try {
@@ -93,13 +102,6 @@ export class WorkerKernelManager {
         }
       }
     });
-
-    if (typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope) {
-      this.mainProxy = new Proxy<Window>({} as any, {});
-    } else {
-      // @ts-ignore
-      this.mainProxy = window;
-    }
   }
 
   postMessage(message: WorkerResponse) {
@@ -176,8 +178,7 @@ export type WorkerMessage =
       type: "custom";
       kernelId: string;
       message: any;
-    }
-  | ProxyMessage;
+    };
 
 /**
  * Every response has an id to identify the communication and a type
@@ -208,7 +209,8 @@ export type WorkerResponse =
       type: "custom";
       kernelId: string;
       message: any;
-    };
+    }
+  | ProxyMessage;
 
 /**
  * A single kernel, usually for a specific cell type.

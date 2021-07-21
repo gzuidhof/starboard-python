@@ -1,5 +1,5 @@
 /**
- * TODO: Change it to a circular buffer! That way, we can 'stream' data
+ * TODO: Change it to a fixed size, streaming buffer!
  * One-way memory, can block a web worker until data from the main thread arrives.
  *
  * Web Worker Usage:
@@ -31,11 +31,11 @@ export class AsyncMemory {
   static UNLOCKED = 0;
   static LOCKED = 1;
 
-  sharedLock: SharedArrayBuffer;
-  lockAndSize: Int32Array;
+  readonly sharedLock: SharedArrayBuffer;
+  readonly lockAndSize: Int32Array;
 
-  sharedMemory: SharedArrayBuffer;
-  memory: Uint8Array;
+  readonly sharedMemory: SharedArrayBuffer;
+  readonly memory: Uint8Array;
 
   constructor(sharedLock?: SharedArrayBuffer, sharedMemory?: SharedArrayBuffer) {
     this.sharedLock = sharedLock ?? new SharedArrayBuffer(8 * Int32Array.BYTES_PER_ELEMENT);
@@ -121,6 +121,7 @@ export class AsyncMemory {
     return Atomics.load(this.lockAndSize, AsyncMemory.SIZE_INDEX);
   }
 
+  // TODO: Remove
   resize(newSize: number) {
     this.sharedMemory = new SharedArrayBuffer(newSize);
     this.memory = new Uint8Array(this.sharedMemory);

@@ -1,6 +1,17 @@
 import { v4 as uuidv4 } from "uuid";
 import { AsyncMemory } from "./async-memory";
 
+// Cases that the proxies have to handle:
+// number https://stackoverflow.com/questions/2003493/javascript-float-from-to-bits
+// undefined
+// null
+// boolean
+// date https://github.com/gzuidhof/console-feed/blob/b02d43a5d0e4eb61b8fd125015645dd77c94b24c/src/Transform/replicator/index.ts#L331-L339
+// string (arbitrary, known length)
+// bigint BigInt("9007199254740991") and .valueOf
+//
+// array, object, symbol, function, error, typedarray, dom element, map, set, ... (grab the id from those, otherwise try to directly put them into the result)
+
 /**
  * Lets one other thread access the objects on this thread.
  * Usually runs on the main thread.
@@ -14,14 +25,19 @@ export class ObjectProxyHost {
     this.memory = memory;
   }
 
+  /** Creates a valid, random id for a given object */
+  private getId(value: any) {
+    return uuidv4() + "-" + (typeof value === "function" ? "f" : "o");
+  }
+
   registerRootObject(value: any) {
-    const id = uuidv4();
+    const id = this.getId(value);
     this.rootReferences.set(id, value);
     return id;
   }
 
   registerTempObject(value: any) {
-    const id = uuidv4();
+    const id = this.getId(value);
     this.temporaryReferences.set(id, value);
     return id;
   }
@@ -37,6 +53,7 @@ export class ObjectProxyHost {
   // A serializePostMessage isn't needed here, because all we're ever going to pass to the worker are ids
 
   serializeMemory(value: any, buffer: SharedArrayBuffer) {
+    // TODO:
     // Cases
     // number https://stackoverflow.com/questions/2003493/javascript-float-from-to-bits
     // undefined
@@ -143,13 +160,18 @@ export class ObjectProxyClient {
     this.memory.lock();
     this.postMessage({
       type: "proxy-reflect",
-      method: "get",
+      method: method,
       target: this.serializePostMessage(target),
       arguments: args.map((v) => this.serializePostMessage(v)),
     });
     this.memory.waitForSize();
     const value = this.deserializeMemory(this.memory);
     return value;
+  }
+
+  /** Checks if an id encodes a function. Mostly a silly hack to ensure that proxies can work as expected */
+  private isFunction(id: string) {
+    return id.endsWith("-f");
   }
 
   /**
@@ -221,8 +243,8 @@ export class ObjectProxyClient {
       setPrototypeOf(target, proto) {
         return Reflect.setPrototypeOf(target, proto);
       },*/
-        // TODO: Uh oh, I need to distinguish between object and function proxies
-        // For function objects
+
+        // For function objects (client.isFunction(id))
         /*apply(target, thisArg, argumentsList) {
         return Reflect.apply(target, thisArg, argumentsList);
       },
@@ -233,18 +255,6 @@ export class ObjectProxyClient {
     ) as T;
   }
 }
-
-// Cases
-// number https://stackoverflow.com/questions/2003493/javascript-float-from-to-bits
-// undefined
-// null
-// boolean
-// date https://github.com/gzuidhof/console-feed/blob/b02d43a5d0e4eb61b8fd125015645dd77c94b24c/src/Transform/replicator/index.ts#L331-L339
-// string (arbitrary, known length)
-// bigint BigInt("9007199254740991") and .valueOf
-//
-// array, object, symbol, function, error, typedarray, dom element, map, set, ... (grab the id from those, otherwise try to directly put them into the result)
-//
 
 function isSimplePrimitive(value: any) {
   if (value === undefined) {
