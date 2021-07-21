@@ -34,7 +34,9 @@ export class ObjectProxyHost {
     return this.rootReferences.get(id) ?? this.temporaryReferences.get(id);
   }
 
-  serializeBuffer(value: any, buffer: SharedArrayBuffer) {
+  // A serializePostMessage isn't needed here, because all we're ever going to pass to the worker are ids
+
+  serializeMemory(value: any, buffer: SharedArrayBuffer) {
     // Cases
     // number https://stackoverflow.com/questions/2003493/javascript-float-from-to-bits
     // undefined
@@ -83,8 +85,10 @@ export class ObjectProxyHost {
 export class ObjectProxyClient {
   readonly objectId = Symbol("id");
   readonly memory: AsyncMemory;
-  constructor(memory: AsyncMemory) {
+  readonly postMessage: (message: ProxyMessage) => void;
+  constructor(memory: AsyncMemory, postMessage: (message: ProxyMessage) => void) {
     this.memory = memory;
+    this.postMessage = postMessage;
   }
 
   /**
@@ -103,40 +107,90 @@ export class ObjectProxyClient {
   }
 
   /**
-   * Deserializes an object from a shared array buffer.
+   * Deserializes an object from a shared array buffer. Can return a proxy.
    */
-  deserializeBuffer(buffer: SharedArrayBuffer) {}
+  deserializeMemory(memory: AsyncMemory) {
+    // TODO: Implement this
+
+    // Ensure buffer size
+    const numberOfBytes = memory.readSize();
+    if (numberOfBytes > memory.sharedMemory.byteLength) {
+      // TODO: Streaming
+      self.postMessage({
+        type: "data-buffer",
+        dataBuffer: memory.resize(numberOfBytes),
+      } as WorkerResponse);
+    } else {
+      self.postMessage({
+        type: "data-buffer",
+      } as WorkerResponse);
+    }
+    // Wait (blocking)
+    memory.waitForWorker();
+    // Read the result
+    const result = deserialize(memory.memory, numberOfBytes);
+
+    // TODO: Optionally wrap it in a proxy. Oh boi
+
+    return result;
+  }
+
+  /**
+   * Calls a Reflect function on an object from the other thread
+   * @returns The result of the operation, can be a primitive or a proxy
+   */
+  private proxyReflect(method: keyof typeof Reflect, target: any, args: any[]) {
+    this.memory.lock();
+    this.postMessage({
+      type: "proxy-reflect",
+      method: "get",
+      target: this.serializePostMessage(target),
+      arguments: args.map((v) => this.serializePostMessage(v)),
+    });
+    this.memory.waitForSize();
+    const value = this.deserializeMemory(this.memory);
+    return value;
+  }
 
   /**
    * Gets a proxy object for a given id
    */
   getObjectProxy<T = any>(id: string): T {
     // TODO: deep proxy https://github.com/samvv/js-proxy-deep
-    const objectId = this.objectId;
+    const client = this;
 
     return new Proxy(
       {},
       {
         get(target, prop, receiver) {
-          if (prop === objectId) {
+          if (prop === client.objectId) {
             return id;
           }
 
-          // https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
-          // https://stackoverflow.com/questions/37092179/javascript-proxy-objects-dont-work
-          const value = Reflect.get(target, prop, receiver);
-          if (typeof value !== "function") return value;
+          /* const value = Reflect.get(target, prop, receiver); */
+          const value = client.proxyReflect("get", target, [prop, receiver]);
 
+          if (typeof value !== "function") return value;
+          /* Functions need special handling
+           * https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
+           * https://stackoverflow.com/questions/37092179/javascript-proxy-objects-dont-work
+           */
           return new Proxy(value, {
             apply(_, thisArg, args) {
-              // this: the object the function was called with. Can be the proxy or something else
+              // thisArg: the object the function was called with. Can be the proxy or something else
               // receiver: the object the propery was gotten from. Is always the proxy or something inheriting from the proxy
               // target: the original object
+
+              // TODO: Or maybe thisArg[client.objectId] === receiver[client.objectId]?
               const calledWithProxy = thisArg === receiver;
-              return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
+
+              /* return Reflect.apply(value, calledWithProxy ? target : thisArg, args); */
+              const value = client.proxyReflect("apply", calledWithProxy ? target : thisArg, args ?? []);
+              return value;
             },
           });
         },
+        // TODO:
         /*set(target, prop, value, receiver) {
         return Reflect.set(target, prop, value, receiver);
       },
@@ -167,6 +221,7 @@ export class ObjectProxyClient {
       setPrototypeOf(target, proto) {
         return Reflect.setPrototypeOf(target, proto);
       },*/
+        // TODO: Uh oh, I need to distinguish between object and function proxies
         // For function objects
         /*apply(target, thisArg, argumentsList) {
         return Reflect.apply(target, thisArg, argumentsList);
