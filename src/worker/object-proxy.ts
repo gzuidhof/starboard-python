@@ -1,16 +1,48 @@
 import { v4 as uuidv4 } from "uuid";
 import { AsyncMemory } from "./async-memory";
 
-// Cases that the proxies have to handle:
-// number https://stackoverflow.com/questions/2003493/javascript-float-from-to-bits
-// undefined
-// null
-// boolean
-// date https://github.com/gzuidhof/console-feed/blob/b02d43a5d0e4eb61b8fd125015645dd77c94b24c/src/Transform/replicator/index.ts#L331-L339
-// string (arbitrary, known length)
-// bigint BigInt("9007199254740991") and .valueOf
-//
-// array, object, symbol, function, error, typedarray, dom element, map, set, ... (grab the id from those, otherwise try to directly put them into the result)
+// TODO: Comment here https://github.com/Gaubee/blog/issues/118
+
+const SERIALIZATION = {
+  UNDEFINED: 0,
+  NULL: 1,
+  FALSE: 2,
+  TRUE: 3,
+  NUMBER: 4,
+  DATE: 5,
+  STRING: 10,
+  BIGINT: 11,
+  OBJECT: 255,
+} as const;
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder("utf-8");
+
+const encodeFloat = useFloatEncoder();
+const decodeFloat = useFloatDecoder();
+
+function useFloatEncoder() {
+  // https://stackoverflow.com/a/14379836/3492994
+  const temp = new ArrayBuffer(8);
+  const tempFloat64 = new Float64Array(temp);
+  const tempUint8 = new Uint8Array(temp);
+
+  return function (value: number): Uint8Array {
+    tempFloat64[0] = value;
+    return tempUint8;
+  };
+}
+
+function useFloatDecoder() {
+  const temp = new ArrayBuffer(8);
+  const tempFloat64 = new Float64Array(temp);
+  const tempUint8 = new Uint8Array(temp);
+
+  return function (value: Uint8Array): number {
+    tempUint8.set(value);
+    return tempFloat64[0];
+  };
+}
 
 /**
  * Lets one other thread access the objects on this thread.
@@ -20,6 +52,8 @@ export class ObjectProxyHost {
   readonly rootReferences = new Map<string, any>();
   readonly temporaryReferences = new Map<string, any>();
   readonly memory: AsyncMemory;
+
+  private writeMemoryContinuation?: () => void;
 
   constructor(memory: AsyncMemory) {
     this.memory = memory;
@@ -52,21 +86,74 @@ export class ObjectProxyHost {
 
   // A serializePostMessage isn't needed here, because all we're ever going to pass to the worker are ids
 
-  serializeMemory(value: any, buffer: SharedArrayBuffer) {
-    // TODO:
-    // Cases
-    // number https://stackoverflow.com/questions/2003493/javascript-float-from-to-bits
-    // undefined
-    // null
-    // boolean
-    // date https://github.com/gzuidhof/console-feed/blob/b02d43a5d0e4eb61b8fd125015645dd77c94b24c/src/Transform/replicator/index.ts#L331-L339
-    // string (arbitrary, known length)
-    // bigint BigInt("9007199254740991") and .valueOf
-    //
-    // array, object, symbol, function, error, typedarray, dom element, map, set, ... (will cause a temp reference to get registered)
-    //
-    // too big for the buffer, then we need to serialize a part of it, write it into the buffer,
-    // wait until the other side has read it and continue writing
+  serializeMemory(value: any, memory: AsyncMemory) {
+    // Simple primitives. Guaranteed to fit into the shared memory.
+    if (value === undefined) {
+      memory.memory[0] = SERIALIZATION.UNDEFINED;
+      memory.unlockSize();
+    } else if (value === null) {
+      memory.memory[0] = SERIALIZATION.NULL;
+      memory.unlockSize();
+    } else if (value === false) {
+      memory.memory[0] = SERIALIZATION.FALSE;
+      memory.unlockSize();
+    } else if (value === true) {
+      memory.memory[0] = SERIALIZATION.TRUE;
+      memory.unlockSize();
+    } else if (typeof value === "number") {
+      memory.memory[0] = SERIALIZATION.NUMBER;
+      memory.memory.set(encodeFloat(value), 1);
+      memory.unlockSize();
+    } else if (value instanceof Date) {
+      memory.memory[0] = SERIALIZATION.DATE;
+      const time = value.getTime();
+      memory.memory.set(encodeFloat(time), 1);
+      memory.unlockSize();
+    }
+    // Variable length primitives. Not guaranteed to fit into the shared memory, but we know their size.
+    else if (typeof value === "string") {
+      memory.memory[0] = SERIALIZATION.STRING;
+      // A string encoded in utf-8 uses at most 4 bytes per character
+      // Actually, I could use the encodeInto API and then check if {read} < string.length
+      if (value.length * 4 <= memory.memory.byteLength) {
+        const { written } = textEncoder.encodeInto(value, memory.memory.slice(1)); // TODO: Wait what the heck, this doesn't work on Opera?
+        if (written === undefined) {
+          throw new Error("Text encoder failed to report the number of written bytes");
+        }
+        memory.writeSize(written);
+        memory.unlockSize();
+      } else {
+        const bytes = textEncoder.encode(value);
+        const memorySize = memory.memory.byteLength - 1;
+        let offset = 0;
+        let remainingBytes = bytes.byteLength;
+        memory.memory.set(bytes.slice(offset, memorySize), 1);
+        offset += memorySize;
+        remainingBytes -= memorySize;
+        this.writeMemoryContinuation = () => {
+          if (remainingBytes > 0) {
+            memory.memory.set(bytes.slice(offset, memorySize), 1);
+            offset += memorySize;
+            remainingBytes -= memorySize;
+          } else {
+            this.writeMemoryContinuation = undefined;
+          }
+          memory.unlockSize();
+        };
+        memory.unlockSize();
+      }
+    } else if (typeof value === "bigint") {
+      memory.memory[0] = SERIALIZATION.BIGINT;
+      const digits = value.toString();
+      // TODO: Implement this
+    }
+    // Object. Serialized as ID, guaranteed to fit into shared memory
+    else {
+      memory.memory[0] = SERIALIZATION.OBJECT;
+      const id = this.registerTempObject(value);
+      textEncoder.encodeInto(id, memory.memory.slice(1));
+      memory.unlockSize();
+    }
   }
 
   /**
@@ -89,6 +176,13 @@ export class ObjectProxyHost {
       const result = (method as any)(this.getObject(message.target), ...args);
 
       // TODO: Write the result back through asyncmemory
+    } else if (message.type === "proxy-shared-memory") {
+      // Write remaining data to shared memory
+      if (this.writeMemoryContinuation === undefined) {
+        console.warn("No more data to write to shared memory");
+      } else {
+        this.writeMemoryContinuation();
+      }
     } else {
       console.warn("Unknown proxy message", message);
     }
@@ -127,29 +221,38 @@ export class ObjectProxyClient {
    * Deserializes an object from a shared array buffer. Can return a proxy.
    */
   deserializeMemory(memory: AsyncMemory) {
-    // TODO: Implement this
-
-    // Ensure buffer size
+    // Uint8Arrays have the convenient property of having 1 byte per element.
     const numberOfBytes = memory.readSize();
-    if (numberOfBytes > memory.sharedMemory.byteLength) {
-      // TODO: Streaming
-      self.postMessage({
-        type: "data-buffer",
-        dataBuffer: memory.resize(numberOfBytes),
-      } as WorkerResponse);
+    let resultBytes: Uint8Array;
+    if (numberOfBytes <= memory.sharedMemory.byteLength) {
+      resultBytes = memory.memory;
     } else {
-      self.postMessage({
-        type: "data-buffer",
-      } as WorkerResponse);
-    }
-    // Wait (blocking)
-    memory.waitForWorker();
-    // Read the result
-    const result = deserialize(memory.memory, numberOfBytes);
+      let offset = 0;
+      let remainingBytes = numberOfBytes;
+      resultBytes = new Uint8Array(numberOfBytes);
+      while (remainingBytes >= memory.sharedMemory.byteLength) {
+        resultBytes.set(memory.memory, offset);
+        offset += memory.sharedMemory.byteLength;
+        remainingBytes -= memory.sharedMemory.byteLength;
+        memory.lockSize();
+        // Notify main thread
+        this.postMessage({ type: "proxy-shared-memory" });
 
-    // TODO: Optionally wrap it in a proxy. Oh boi
+        memory.waitForSize();
+      }
+      if (remainingBytes > 0) {
+        resultBytes.set(memory.memory.slice(offset, remainingBytes), offset);
+      }
+    }
+
+    // TODO: Implement this. Optionally wrap it in a proxy. Oh boi
+    /*
+    // Read the result
+    const result = deserialize(resultBytes, numberOfBytes);
 
     return result;
+    */
+    return null;
   }
 
   /**
@@ -166,6 +269,7 @@ export class ObjectProxyClient {
     });
     this.memory.waitForSize();
     const value = this.deserializeMemory(this.memory);
+    this.memory.unlockWorker();
     return value;
   }
 
@@ -261,9 +365,9 @@ function isSimplePrimitive(value: any) {
     return true;
   } else if (value === null) {
     return true;
-  } else if (value === true) {
-    return true;
   } else if (value === false) {
+    return true;
+  } else if (value === true) {
     return true;
   } else if (typeof value === "number") {
     return true;
@@ -282,15 +386,20 @@ function isVariableLengthPrimitive(value: any) {
   }
 }
 
-export type ProxyMessage = {
-  type: "proxy-reflect";
-  method: keyof typeof Reflect;
-  /**
-   * An object id
-   */
-  target: string;
-  /**
-   * Further parameters. Have to be serialized
-   */
-  arguments?: any[];
-};
+export type ProxyMessage =
+  | {
+      type: "proxy-reflect";
+      method: keyof typeof Reflect;
+      /**
+       * An object id
+       */
+      target: string;
+      /**
+       * Further parameters. Have to be serialized
+       */
+      arguments?: any[];
+    }
+  | {
+      /** For requesting more bytes from the shared memory*/
+      type: "proxy-shared-memory";
+    };

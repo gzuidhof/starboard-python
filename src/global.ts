@@ -146,22 +146,12 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
         const userInput = prompt("Input"); // TODO: Replace this with a proper input thingy
         dataToTransfer = serialize(userInput);
         asyncMemory.writeSize(dataToTransfer.buffer.byteLength);
-        asyncMemory.unlockSize();
-        break;
-      }
-      case "data-buffer": {
-        if (!asyncMemory) break;
-        // Resize buffer
-        if (data.dataBuffer) {
-          asyncMemory.sharedMemory = data.dataBuffer;
-          asyncMemory.memory = new Uint8Array(asyncMemory.sharedMemory);
-        }
-        // Write data
-        if (dataToTransfer) {
+        if (dataToTransfer.byteLength <= asyncMemory.memory.byteLength) {
           asyncMemory.memory.set(dataToTransfer);
-          dataToTransfer = undefined;
+        } else {
+          console.warn("Typed too many characters");
         }
-        asyncMemory.unlockWorker();
+        asyncMemory.unlockSize();
         break;
       }
       default: {

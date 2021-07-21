@@ -48,11 +48,15 @@ export class AsyncMemory {
     this.sharedLock = sharedLock ?? new SharedArrayBuffer(8 * Int32Array.BYTES_PER_ELEMENT);
     this.lockAndSize = new Int32Array(this.sharedLock);
     if (this.lockAndSize.length < 8) {
-      throw new Error("Expected an array with at least 8x32 bits");
+      throw new Error("Expected an sharedLock with at least 8x32 bytes");
     }
 
     this.sharedMemory = sharedMemory ?? new SharedArrayBuffer(1024);
     this.memory = new Uint8Array(this.sharedMemory);
+
+    if (this.sharedMemory.byteLength < 1024) {
+      throw new Error("Expected an sharedMemory with at least 1024 bytes");
+    }
   }
 
   lock() {
@@ -106,14 +110,6 @@ export class AsyncMemory {
     Atomics.wait(this.lockAndSize, AsyncMemory.LOCK_SIZE_INDEX, AsyncMemory.LOCKED);
   }
 
-  // TODO: Remove
-  /**
-   * Only legal if the size has been unlocked
-   */
-  waitForWorker() {
-    Atomics.wait(this.lockAndSize, AsyncMemory.LOCK_WORKER_INDEX, AsyncMemory.LOCKED);
-  }
-
   /**
    * Should be called from the main thread!
    * Only legal if the worker is locked and the size is locked
@@ -127,13 +123,6 @@ export class AsyncMemory {
    */
   readSize(): number {
     return Atomics.load(this.lockAndSize, AsyncMemory.SIZE_INDEX);
-  }
-
-  // TODO: Remove
-  resize(newSize: number) {
-    this.sharedMemory = new SharedArrayBuffer(newSize);
-    this.memory = new Uint8Array(this.sharedMemory);
-    return this.sharedMemory;
   }
 
   /**
@@ -151,8 +140,9 @@ export class AsyncMemory {
     }
     Atomics.notify(this.lockAndSize, AsyncMemory.LOCK_SIZE_INDEX);
   }
+
   /**
-   * Should be called from the main thread!
+   * Should be called from the worker thread!
    */
   unlockWorker() {
     const oldValue = Atomics.compareExchange(

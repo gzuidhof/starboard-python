@@ -36,8 +36,4 @@ export type WorkerResponse =
     }
   | {
       type: "stdin";
-    }
-  | {
-      type: "data-buffer";
-      dataBuffer?: SharedArrayBuffer;
     };

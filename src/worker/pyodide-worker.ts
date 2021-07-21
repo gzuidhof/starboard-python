@@ -190,6 +190,7 @@ self.addEventListener("message", async (e: MessageEvent) => {
           console.log("Converted result ", { result });
         }
       }
+      // TODO: Handle PythonError object (and check if there are other objects like that)
 
       try {
         self.postMessage({
@@ -270,20 +271,11 @@ function getInput() {
   // Ensure buffer size
   const numberOfBytes = asyncMemory.readSize();
   if (numberOfBytes > asyncMemory.sharedMemory.byteLength) {
-    self.postMessage({
-      type: "data-buffer",
-      dataBuffer: asyncMemory.resize(numberOfBytes),
-    } as WorkerResponse);
-  } else {
-    self.postMessage({
-      type: "data-buffer",
-    } as WorkerResponse);
+    console.warn("Typed too many characters");
   }
-  // Wait (blocking)
-  asyncMemory.waitForWorker();
   // Read the result
   const result = deserialize(asyncMemory.memory, numberOfBytes);
-
+  asyncMemory.unlockWorker();
   return result ? result + "\n" : "\n";
 }
 
