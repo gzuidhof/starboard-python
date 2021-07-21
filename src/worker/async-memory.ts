@@ -4,24 +4,31 @@
  *
  * Web Worker Usage:
  * 1. Lock "web worker"
- * 2. Lock "shared memory"
+ * 2. Set "shared memory signal"
  * 3. Notify main thread (Main thread does stuff)
- * 4. Wait for "shared memory" unlock
+ * 4. Wait for "shared memory signal"
  * 5. Read size buffer
- * 6. Ensure that the shared memory is large enough
- * 7. Notify main thread (Main thread does stuff)
- * 8. Wait for "web worker" unlock
- * 9. Read shared memory
+ * 6. Read shared memory
+ * 7. If the size buffer was bigger than the read memory size
+ * 7.1. Set "shared memory signal"
+ * 7.2. Notify main thread (Main thread writes remaining data to shared memory)
+ * 7.3. Wait for "shared memory signal"
+ * 7.4. Read shared memory
+ * 7.5. Go back to step 7. (loop)
+ * 8. Unlock "web worker"
  *
  * Main Thread Usage:
  * 1. Get notification
  * 2. Do operations
- * 3. Serialize result
- * 4. Write size into the size buffer (TODO: About here-ish, it should be possible to directly write the data & skip some stuff)
- * 5. Unlock "shared memory" (Worker does stuff)
- * 6. Get notification
- * 7. Write data into shared memory
- * 8. Unlock "web worker" (Worker does stuff)
+ * 3. Serialize data
+ * 4. Write size into the size buffer
+ * 5. Write partial data into shared memory
+ * 6. Unlock "shared memory signal" (Worker does stuff)
+ * 7. If not everything has been written to the shared memory yet
+ * 7.1. Get notification
+ * 7.2. Write partial data into shared memory
+ * 7.3. Unlock "shared memory signal" (Worker does stuff)
+ * 7.4. Go back to step 7. (loop)
  */
 export class AsyncMemory {
   // Reference: https://v8.dev/features/atomics
@@ -54,7 +61,7 @@ export class AsyncMemory {
     Atomics.store(this.lockAndSize, AsyncMemory.SIZE_INDEX, 0);
   }
 
-  private lockWorker() {
+  lockWorker() {
     while (true) {
       const oldValue = Atomics.compareExchange(
         this.lockAndSize,
@@ -73,7 +80,7 @@ export class AsyncMemory {
     }
   }
 
-  private lockSize() {
+  lockSize() {
     while (true) {
       const oldValue = Atomics.compareExchange(
         this.lockAndSize,
@@ -99,6 +106,7 @@ export class AsyncMemory {
     Atomics.wait(this.lockAndSize, AsyncMemory.LOCK_SIZE_INDEX, AsyncMemory.LOCKED);
   }
 
+  // TODO: Remove
   /**
    * Only legal if the size has been unlocked
    */
