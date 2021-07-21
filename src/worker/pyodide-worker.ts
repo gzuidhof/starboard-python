@@ -1,14 +1,3 @@
-// TODO: Questions: (guido)
-// - Should the worker stuff be optional?
-// - SharedWorker support? (especially for development?)
-// - Interrupting? (Also relevant https://github.com/pyodide/pyodide/pull/852 )
-// - Preloading? ( https://github.com/pyodide/pyodide/issues/1576 )
-// - Check out asyncio ( https://github.com/pyodide/pyodide/issues/245 )
-// - Restarting? ( https://github.com/pyodide/pyodide/issues/703 )
-// - Eval code? https://github.com/pyodide/pyodide/pull/1083
-// - design this so that multiple thingies can access the same kernel. Everyone is responsible for their own 'scope' and their own variables, even if this will never work 100%
-// - it should be possible to define multiple 'kernels' that run in the same worker
-// - test matplotlib, pretty sure that it currently doesn't work
 /// <reference no-default-lib="true"/>
 /// <reference lib="es2020" />
 /// <reference lib="WebWorker" />
@@ -33,15 +22,18 @@ declare global {
   }
 }
 
+// TODO: Open a  Starboard kernel issue:
+// - SharedWorker support? (especially for development?)
+// - Interrupting? (Also relevant https://github.com/pyodide/pyodide/pull/852 and https://github.com/pyodide/pyodide/issues/676)
+// - Restarting? ( https://github.com/pyodide/pyodide/issues/703 )
+// - Shared filesystem
+
 // TODO:
 // document that COOP/COEP is required
 
 /**
  * TODO:
  * # Async Python research
- * ## Interrupt execution
- * sys.settrace() and SharedArrayBuffer
- * https://github.com/pyodide/pyodide/issues/676
  * ## Syncify
  * https://github.com/pyodide/pyodide/pull/1547
  * ## Relevant issues for documentation/commenting
@@ -88,9 +80,14 @@ self.addEventListener("message", async (e: MessageEvent) => {
         },
       };
 
-      // TODO: deep proxy https://github.com/samvv/js-proxy-deep
+      const objectId = Symbol("id");
+
       const globalProxy = new Proxy(globalThis, {
         get(target, prop, receiver) {
+          if (prop === objectId) {
+            // TODO: return the id for this object
+          }
+
           // https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
           // https://stackoverflow.com/questions/37092179/javascript-proxy-objects-dont-work
           const value = Reflect.get(target, prop, receiver);

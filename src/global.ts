@@ -7,6 +7,7 @@ import { assertUnreachable } from "./util";
 import { AsyncMemory } from "./worker/async-memory";
 import { serialize } from "./worker/serialize-object";
 import type { Runtime } from "starboard-notebook/dist/src/types";
+import { exposeObject } from "./worker/object-proxy";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted";
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
@@ -102,6 +103,8 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
   loadingStatus = "loading";
   const worker = workerUrl ? new Worker(workerUrl) : new Worker(new URL("pyodide-worker.js", import.meta.url));
   const asyncMemory = getAsyncMemory();
+  const globalThisId = exposeObject(globalThis);
+  const getInputId = exposeObject(prompt);
   let dataToTransfer: Uint8Array | undefined = undefined;
 
   pyodideLoadSingleton = new Promise((resolve, reject) => {

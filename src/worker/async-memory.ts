@@ -1,4 +1,5 @@
 /**
+ * TODO: Change it to a circular buffer! That way, we can 'stream' data
  * One-way memory, can block a web worker until data from the main thread arrives.
  *
  * Web Worker Usage:
@@ -36,14 +37,14 @@ export class AsyncMemory {
   sharedMemory: SharedArrayBuffer;
   memory: Uint8Array;
 
-  constructor(sharedLock: SharedArrayBuffer, sharedMemory?: SharedArrayBuffer) {
-    this.sharedLock = sharedLock;
+  constructor(sharedLock?: SharedArrayBuffer, sharedMemory?: SharedArrayBuffer) {
+    this.sharedLock = sharedLock ?? new SharedArrayBuffer(8 * Int32Array.BYTES_PER_ELEMENT);
     this.lockAndSize = new Int32Array(this.sharedLock);
     if (this.lockAndSize.length < 8) {
       throw new Error("Expected an array with at least 8x32 bits");
     }
 
-    this.sharedMemory = sharedMemory ?? new SharedArrayBuffer(100);
+    this.sharedMemory = sharedMemory ?? new SharedArrayBuffer(1024);
     this.memory = new Uint8Array(this.sharedMemory);
   }
 
