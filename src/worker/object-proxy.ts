@@ -87,6 +87,8 @@ export class ObjectProxyHost {
   // A serializePostMessage isn't needed here, because all we're ever going to pass to the worker are ids
 
   serializeMemory(value: any, memory: AsyncMemory) {
+    memory.writeSize(8); // Anything that fits into 8 bytes is fine
+
     // Simple primitives. Guaranteed to fit into the shared memory.
     if (value === undefined) {
       memory.memory[0] = SERIALIZATION.UNDEFINED;
@@ -116,7 +118,7 @@ export class ObjectProxyHost {
       // A string encoded in utf-8 uses at most 4 bytes per character
       // Actually, I could use the encodeInto API and then check if {read} < string.length
       if (value.length * 4 <= memory.memory.byteLength) {
-        const { written } = textEncoder.encodeInto(value, memory.memory.slice(1)); // TODO: Wait what the heck, this doesn't work on Opera?
+        const { written } = textEncoder.encodeInto(value, memory.memory.subarray(1)); // TODO: Wait what the heck, this doesn't work on Opera?
         if (written === undefined) {
           throw new Error("Text encoder failed to report the number of written bytes");
         }
@@ -124,15 +126,15 @@ export class ObjectProxyHost {
         memory.unlockSize();
       } else {
         const bytes = textEncoder.encode(value);
-        const memorySize = memory.memory.byteLength - 1;
+        const memorySize = memory.memory.byteLength;
         let offset = 0;
         let remainingBytes = bytes.byteLength;
-        memory.memory.set(bytes.slice(offset, memorySize), 1);
-        offset += memorySize;
-        remainingBytes -= memorySize;
+        memory.memory.set(bytes.subarray(offset, memorySize - 1), 1);
+        offset += memorySize - 1;
+        remainingBytes -= memorySize - 1;
         this.writeMemoryContinuation = () => {
           if (remainingBytes > 0) {
-            memory.memory.set(bytes.slice(offset, memorySize), 1);
+            memory.memory.set(bytes.subarray(offset, memorySize), 0);
             offset += memorySize;
             remainingBytes -= memorySize;
           } else {
@@ -140,18 +142,22 @@ export class ObjectProxyHost {
           }
           memory.unlockSize();
         };
+        memory.writeSize(bytes.byteLength);
         memory.unlockSize();
       }
     } else if (typeof value === "bigint") {
       memory.memory[0] = SERIALIZATION.BIGINT;
       const digits = value.toString();
-      // TODO: Implement this
+      // TODO: Implement this (just like the text ^)
+      console.warn("Not implemented");
+      memory.unlockSize();
     }
     // Object. Serialized as ID, guaranteed to fit into shared memory
     else {
       memory.memory[0] = SERIALIZATION.OBJECT;
       const id = this.registerTempObject(value);
-      textEncoder.encodeInto(id, memory.memory.slice(1));
+      const { written } = textEncoder.encodeInto(id, memory.memory.subarray(1));
+      memory.writeSize(written ?? 128);
       memory.unlockSize();
     }
   }
@@ -174,8 +180,8 @@ export class ObjectProxyHost {
       const method = Reflect[message.method];
       const args = (message.arguments ?? []).map((v) => this.deserializePostMessage(v));
       const result = (method as any)(this.getObject(message.target), ...args);
-
-      // TODO: Write the result back through asyncmemory
+      // Write result to shared memory
+      this.serializeMemory(result, memory);
     } else if (message.type === "proxy-shared-memory") {
       // Write remaining data to shared memory
       if (this.writeMemoryContinuation === undefined) {
@@ -221,38 +227,60 @@ export class ObjectProxyClient {
    * Deserializes an object from a shared array buffer. Can return a proxy.
    */
   deserializeMemory(memory: AsyncMemory) {
-    // Uint8Arrays have the convenient property of having 1 byte per element.
     const numberOfBytes = memory.readSize();
+
+    // Uint8Arrays have the convenient property of having 1 byte per element.
     let resultBytes: Uint8Array;
     if (numberOfBytes <= memory.sharedMemory.byteLength) {
       resultBytes = memory.memory;
     } else {
+      const memorySize = memory.sharedMemory.byteLength;
       let offset = 0;
       let remainingBytes = numberOfBytes;
       resultBytes = new Uint8Array(numberOfBytes);
-      while (remainingBytes >= memory.sharedMemory.byteLength) {
+      while (remainingBytes >= memorySize) {
         resultBytes.set(memory.memory, offset);
-        offset += memory.sharedMemory.byteLength;
-        remainingBytes -= memory.sharedMemory.byteLength;
+        offset += memorySize;
+        remainingBytes -= memorySize;
         memory.lockSize();
-        // Notify main thread
         this.postMessage({ type: "proxy-shared-memory" });
-
         memory.waitForSize();
       }
       if (remainingBytes > 0) {
-        resultBytes.set(memory.memory.slice(offset, remainingBytes), offset);
+        resultBytes.set(memory.memory.subarray(0, remainingBytes), offset);
       }
     }
 
-    // TODO: Implement this. Optionally wrap it in a proxy. Oh boi
-    /*
-    // Read the result
-    const result = deserialize(resultBytes, numberOfBytes);
-
-    return result;
-    */
-    return null;
+    // Simple primitives. Guaranteed to fit into the shared memory.
+    if (resultBytes[0] === SERIALIZATION.UNDEFINED) {
+      return undefined;
+    } else if (resultBytes[0] === SERIALIZATION.NULL) {
+      return null;
+    } else if (resultBytes[0] === SERIALIZATION.FALSE) {
+      return false;
+    } else if (resultBytes[0] === SERIALIZATION.TRUE) {
+      return true;
+    } else if (resultBytes[0] === SERIALIZATION.NUMBER) {
+      return decodeFloat(resultBytes.subarray(1, 9));
+    } else if (resultBytes[0] === SERIALIZATION.DATE) {
+      const date = new Date();
+      date.setTime(decodeFloat(resultBytes.subarray(1, 9)));
+      return date;
+    }
+    // Variable length primitives. We already read all of their data
+    else if (resultBytes[0] === SERIALIZATION.STRING) {
+      return textDecoder.decode(resultBytes.subarray(1));
+    } else if (resultBytes[0] === SERIALIZATION.BIGINT) {
+      return BigInt(textDecoder.decode(resultBytes.subarray(1)));
+    }
+    // Object. Serialized as ID, guaranteed to fit into shared memory
+    else if (resultBytes[0] === SERIALIZATION.OBJECT) {
+      const id = textDecoder.decode(resultBytes.subarray(1));
+      return this.getObjectProxy(id);
+    } else {
+      console.warn("Unknown type", resultBytes[0]);
+      return null;
+    }
   }
 
   /**

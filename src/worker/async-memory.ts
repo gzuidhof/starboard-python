@@ -1,5 +1,4 @@
 /**
- * TODO: Change it to a fixed size, streaming buffer!
  * One-way memory, can block a web worker until data from the main thread arrives.
  *
  * Web Worker Usage:
