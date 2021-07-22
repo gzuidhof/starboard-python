@@ -4,11 +4,21 @@
 
 import "../pyodide/pyodide";
 import type { Pyodide as PyodideType } from "../pyodide/typings";
+import type { KernelManager, WorkerKernel } from "./kernel";
 import { assertUnreachable } from "../util";
-import { WorkerMessage, WorkerResponse } from "./worker-message";
+import { PyodideWorkerOptions, PyodideWorkerResult } from "./worker-message";
 import { intArrayFromString } from "./emscripten-utils";
 import { AsyncMemory } from "./async-memory";
 import { deserialize } from "./serialize-object";
+
+declare global {
+  interface WorkerGlobalScope {
+    /**
+     * The object managing all the kernels in this web worker
+     */
+    manager: KernelManager;
+  }
+}
 
 declare global {
   interface WorkerGlobalScope {
@@ -19,6 +29,45 @@ declare global {
       print?: (text: string) => void;
       printErr?: (text: string) => void;
     }): Promise<void>;
+  }
+}
+
+class PyodideKernel implements WorkerKernel {
+  kernelId: string;
+
+  constructor(options: { id: string } & PyodideWorkerOptions) {
+    this.kernelId = options.id;
+  }
+  init(): Promise<any> {
+    throw new Error("Method not implemented.");
+  }
+  runCode(code: string): Promise<any> {
+    throw new Error("Method not implemented.");
+  }
+  customMessage(message: any): void {
+    throw new Error("Method not implemented.");
+  }
+
+  createStdin() {
+    let input: number[] = [];
+    let inputIndex = -1; // -1 means that we just returned null
+    function stdin() {
+      if (inputIndex === -1) {
+        const text = self.manager.input();
+        input = intArrayFromString(text + (text.endsWith("\n") ? "" : "\n"), true, 0);
+        inputIndex = 0;
+      }
+
+      if (inputIndex < input.length) {
+        let character = input[inputIndex];
+        inputIndex++;
+        return character;
+      } else {
+        inputIndex = -1;
+        return null;
+      }
+    }
+    return stdin;
   }
 }
 
@@ -103,43 +152,6 @@ self.addEventListener("message", async (e: MessageEvent) => {
             },
           });
         },
-        /*set(target, prop, value, receiver) {
-          return Reflect.set(target, prop, value, receiver);
-        },
-        ownKeys(target) {
-          return Reflect.ownKeys(target);
-        },
-        has(target, prop) {
-          return Reflect.has(target, prop);
-        },
-        defineProperty(target, prop, attributes) {
-          return Reflect.defineProperty(target, prop, attributes);
-        },
-        deleteProperty(target, prop) {
-          return Reflect.deleteProperty(target, prop);
-        },
-        getOwnPropertyDescriptor(target, prop) {
-          return Reflect.getOwnPropertyDescriptor(target, prop);
-        },
-        isExtensible(target) {
-          return Reflect.isExtensible(target);
-        },
-        preventExtensions(target) {
-          return Reflect.preventExtensions(target);
-        },
-        getPrototypeOf(target) {
-          return Reflect.getPrototypeOf(target);
-        },
-        setPrototypeOf(target, proto) {
-          return Reflect.setPrototypeOf(target, proto);
-        },*/
-        // For function objects
-        /*apply(target, thisArg, argumentsList) {
-          return Reflect.apply(target, thisArg, argumentsList);
-        },
-        construct(target, argumentsList, newTarget) {
-          return Reflect.construct(target, argumentsList, newTarget)
-        }*/
       });
 
       pyodideLoadSingleton = self
@@ -230,59 +242,3 @@ function destroyToJsResult(x){
         }
     }
 }*/
-
-function createStdin() {
-  let input: number[] = [];
-  let inputIndex = -1; // -1 means that we just returned null
-  function stdin() {
-    if (inputIndex === -1) {
-      input = intArrayFromString(getInput(), true, 0); // getInput() will always return a string ending in "\n"
-      inputIndex = 0;
-    }
-
-    if (inputIndex < input.length) {
-      let character = input[inputIndex];
-      inputIndex++;
-      return character;
-    } else {
-      inputIndex = -1;
-      return null;
-    }
-  }
-  return stdin;
-}
-
-function getInput() {
-  if (asyncMemory === undefined) {
-    console.warn("Stdin/getting user input is unsupported");
-    return "\n";
-  }
-  // TODO: Maybe we should also support the service worker approach
-  // https://glitch.com/edit/#!/sleep-sw?path=worker.js%3A27%3A40
-
-  // Lock the shared memory
-  asyncMemory.lock();
-  // Request info main thread
-  self.postMessage({
-    type: "stdin",
-  } as WorkerResponse);
-  // Wait (blocking)
-  asyncMemory.waitForSize();
-  // Ensure buffer size
-  const numberOfBytes = asyncMemory.readSize();
-  if (numberOfBytes > asyncMemory.sharedMemory.byteLength) {
-    console.warn("Typed too many characters");
-  }
-  // Read the result
-  const result = deserialize(asyncMemory.memory, numberOfBytes);
-  asyncMemory.unlockWorker();
-  return result ? result + "\n" : "\n";
-}
-
-function sendConsole({ method, args }: { method: string; args: string[] }) {
-  self.postMessage({
-    type: "console",
-    method: method,
-    data: args,
-  } as WorkerResponse);
-}

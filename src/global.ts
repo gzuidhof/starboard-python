@@ -2,16 +2,18 @@
 import css from "./pyodide/pyodide-styles.css";
 import { getPluginOpts } from "./opts";
 import { v4 as uuidv4 } from "uuid";
-import type { WorkerMessage, WorkerResponse } from "./worker/worker-message";
 import { assertUnreachable } from "./util";
+import type { KernelManagerMessage, KernelManagerResponse } from "./worker/kernel";
+import type { PyodideWorkerOptions, PyodideWorkerResult } from "./worker/worker-message";
 import { AsyncMemory } from "./worker/async-memory";
-import { serialize } from "./worker/serialize-object";
 import type { Runtime } from "starboard-notebook/dist/src/types";
 import { ObjectProxyHost } from "./worker/object-proxy";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted";
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
-let pyodideLoadSingleton: Promise<Worker> | undefined = undefined;
+let pyodideLoadSingleton: Promise<string> | undefined = undefined;
+let kernelManager: Worker;
+let objectProxyHost: ObjectProxyHost | null = null;
 const runningCode = new Map<string, (value: any) => void>();
 
 // A global value that is the current HTML element to attach matplotlib figures to..
@@ -68,7 +70,7 @@ function getAsyncMemory() {
   }
 }
 
-async function convertResult(runtime: Runtime, data: WorkerResponse & { type: "result" }) {
+async function convertResult(runtime: Runtime, data: PyodideWorkerResult) {
   if (data.display === "default") {
     return data.value;
   } else if (data.display === "html") {
@@ -93,65 +95,110 @@ async function convertResult(runtime: Runtime, data: WorkerResponse & { type: "r
   }
 }
 
-export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, workerUrl?: string) {
-  if (pyodideLoadSingleton) return pyodideLoadSingleton;
+function loadKernelManager() {
+  // TODO: This part should be moved to starboard
+  const kernelUrl: string | undefined = undefined;
 
-  loadingStatus = "loading";
-  const worker = workerUrl ? new Worker(workerUrl) : new Worker(new URL("pyodide-worker.js", import.meta.url));
+  const worker = kernelUrl ? new Worker(kernelUrl) : new Worker(new URL("kernel.js", import.meta.url));
+
+  // Since all kernels are running in the same worker, they might as well use the same async memory and object proxy
   const asyncMemory = getAsyncMemory();
   const objectProxyHost = asyncMemory ? new ObjectProxyHost(asyncMemory) : null;
   const globalThisId = objectProxyHost?.registerRootObject(globalThis);
   const getInputId = objectProxyHost?.registerRootObject(prompt);
-  let dataToTransfer: Uint8Array | undefined = undefined;
+
+  worker.addEventListener("message", (ev) => {
+    if (!ev.data) {
+      console.warn("Unexpected message from kernel manager", ev);
+      return;
+    }
+    const data = ev.data as KernelManagerResponse;
+
+    if (data.type === "proxy-reflect" || data.type === "proxy-shared-memory") {
+      if (asyncMemory && objectProxyHost) {
+        objectProxyHost.handleProxyMessage(data, asyncMemory);
+      }
+    }
+  });
+
+  worker.postMessage({
+    type: "initialize",
+    asyncMemory: asyncMemory
+      ? {
+          lockBuffer: asyncMemory.sharedLock,
+          dataBuffer: asyncMemory.sharedMemory,
+        }
+      : undefined,
+    globalThisId: globalThisId,
+    getInputId: getInputId,
+  } as KernelManagerMessage);
+
+  return {
+    kernelManager: worker,
+    objectProxyHost: objectProxyHost,
+  };
+}
+
+export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, workerUrl?: string) {
+  if (pyodideLoadSingleton) return pyodideLoadSingleton;
+
+  const result = loadKernelManager();
+  kernelManager = result.kernelManager;
+  objectProxyHost = result.objectProxyHost;
+
+  // Pyodide worker loading
+  loadingStatus = "loading";
+
+  const kernelId = uuidv4();
 
   pyodideLoadSingleton = new Promise((resolve, reject) => {
     // Only the resolve case is handled for now
     function handleInitMessage(ev: MessageEvent<any>) {
-      if (ev.data && (ev.data as WorkerResponse).type === "initialized") {
-        worker.removeEventListener("message", handleInitMessage);
-        resolve(worker);
+      if (!ev.data) return;
+      const data = ev.data as KernelManagerResponse;
+      if (data.type === "kernel-initialized" && data.kernelId === kernelId) {
+        kernelManager.removeEventListener("message", handleInitMessage);
+
+        resolve(kernelId);
       }
     }
-    worker.addEventListener("message", handleInitMessage);
+    kernelManager.addEventListener("message", handleInitMessage);
   });
 
-  worker.addEventListener("message", (e) => {
-    if (!e.data) {
-      console.warn("Pyodide worker sent unexpected message:", e);
-      return;
-    }
-    const data = e.data as WorkerResponse;
+  kernelManager.addEventListener("message", (e) => {
+    if (!e.data) return;
+
+    const data = e.data as KernelManagerResponse;
     switch (data.type) {
-      case "initialized": {
-        // Ignore
-        break;
-      }
       case "result": {
+        if (data.kernelId !== kernelId) break;
         const callback = runningCode.get(data.id);
         if (!callback) {
           console.warn("Missing Python callback");
         } else {
-          convertResult(runtime, data).then(callback);
+          convertResult(runtime, data.value as PyodideWorkerResult).then(callback);
         }
         objectProxyHost?.clearTemporary();
         break;
       }
       case "console": {
+        if (data.kernelId !== kernelId) break;
         (console as any)?.[data.method](...data.data);
         break;
       }
-      case "stdin": {
-        if (!asyncMemory) return;
-
-        const userInput = prompt("Input"); // TODO: Replace this with a proper input thingy
-        dataToTransfer = serialize(userInput);
-        asyncMemory.writeSize(dataToTransfer.buffer.byteLength);
-        if (dataToTransfer.byteLength <= asyncMemory.memory.byteLength) {
-          asyncMemory.memory.set(dataToTransfer);
-        } else {
-          console.warn("Typed too many characters");
-        }
-        asyncMemory.unlockSize();
+      case "error": {
+        if (data.kernelId !== kernelId) break;
+        console.error(data.error);
+      }
+      case "custom": {
+        if (data.kernelId !== kernelId) break;
+        // No custom messages so far
+        break;
+      }
+      // Ignore
+      case "kernel-initialized":
+      case "proxy-reflect":
+      case "proxy-shared-memory": {
         break;
       }
       default: {
@@ -160,14 +207,15 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
     }
   });
 
-  worker.postMessage({
-    type: "initialize",
+  kernelManager.postMessage({
+    type: "import-kernel",
+    className: "PyodideKernel",
+    kernelId: kernelId,
     options: {
       artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
-      lockBuffer: asyncMemory?.sharedLock,
-      dataBuffer: asyncMemory?.sharedMemory,
-    },
-  } as WorkerMessage);
+    } as PyodideWorkerOptions,
+    url: workerUrl ?? new URL("pyodide-worker.js", import.meta.url),
+  } as KernelManagerMessage);
 
   await pyodideLoadSingleton;
   loadingStatus = "ready";
@@ -184,7 +232,7 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
 
   const id = uuidv4();
 
-  const worker = await pyodideLoadSingleton;
+  const kernelId = await pyodideLoadSingleton;
   return new Promise((resolve, reject) => {
     runningCode.set(id, (result) => {
       resolve(result);
@@ -192,15 +240,14 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
     });
 
     try {
-      worker.postMessage({
+      kernelManager.postMessage({
         type: "run",
+        kernelId: kernelId,
         id: id,
         code: code,
-      } as WorkerMessage);
+      } as KernelManagerMessage);
     } catch (e) {
       console.warn(e, data);
-      // It failed to be copied. Usually that means that the object cannot be cloned that easily.
-      // TODO: Handle this more gracefully
       reject(e);
       runningCode.delete(id);
     }

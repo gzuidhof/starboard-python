@@ -9,22 +9,26 @@ function assertUnreachable(_x: never): never {
 /**
  * Manages all the kernels in this worker. Please only `import type {}` this class
  */
-export class WorkerKernelManager {
+export class KernelManager {
   readonly kernels = new Map<string, WorkerKernel>();
 
   asyncMemory: AsyncMemory | undefined;
   proxy: ObjectProxyClient | undefined;
 
   proxiedGlobalThis: undefined | any;
-  proxiedGetInput: undefined | (() => string);
 
-  constructor() {
+  /**
+   * Requests one line of user input
+   */
+  input = () => "\n";
+
+  KernelManager() {
     self.addEventListener("message", async (e: MessageEvent) => {
       if (!e.data) {
         console.warn("Kernel worker received unexpected message:", e);
         return;
       }
-      const data = e.data as WorkerMessage;
+      const data = e.data as KernelManagerMessage;
       switch (data.type) {
         case "initialize": {
           if (data.asyncMemory) {
@@ -36,7 +40,7 @@ export class WorkerKernelManager {
               this.proxiedGlobalThis = this.proxy.getObjectProxy(data.globalThisId);
             }
             if (data.getInputId) {
-              this.proxiedGetInput = this.proxy.getObjectProxy(data.getInputId);
+              this.input = this.proxy.getObjectProxy(data.getInputId);
             }
           } else {
             console.warn("Missing async memory, accessing objects from the main thread will not work");
@@ -47,23 +51,23 @@ export class WorkerKernelManager {
         case "import-kernel": {
           try {
             importScripts(data.url);
-            const kernelClass = (globalThis as any)[data.className];
+            const KernelClass = (globalThis as any)[data.className];
             if (!data.options.id) {
-              data.options.id = uuidv4();
+              data.options.id = data.kernelId;
             }
-            const kernel: WorkerKernel = new kernelClass(data.options);
-            this.kernels.set(kernel.id, kernel);
+            const kernel: WorkerKernel = new KernelClass(data.options);
+            this.kernels.set(kernel.kernelId, kernel);
             kernel.init().then(() => {
               this.postMessage({
                 type: "kernel-initialized",
-                id: data.id,
-                kernelId: kernel.id,
+                kernelId: kernel.kernelId,
               });
             });
           } catch (e) {
             this.postMessage({
               type: "error",
-              id: data.id,
+              kernelId: data.kernelId,
+              id: "",
               error: e + "",
             });
           }
@@ -78,12 +82,14 @@ export class WorkerKernelManager {
             const result = await kernel.runCode(data.code);
             this.postMessage({
               type: "result",
+              kernelId: kernel.kernelId,
               id: data.id,
               value: result, // TODO: Wrap the result
             });
           } catch (e) {
             this.postMessage({
               type: "error",
+              kernelId: data.kernelId,
               id: data.id,
               error: e + "",
             });
@@ -107,13 +113,13 @@ export class WorkerKernelManager {
     });
   }
 
-  postMessage(message: WorkerResponse) {
+  postMessage(message: KernelManagerResponse) {
     self.postMessage(message);
   }
 
   log(kernel: WorkerKernel, ...args: string[]) {
     this.postMessage({
-      kernelId: kernel.id,
+      kernelId: kernel.kernelId,
       type: "console",
       method: "log",
       data: args,
@@ -122,7 +128,7 @@ export class WorkerKernelManager {
 
   logWarning(kernel: WorkerKernel, ...args: string[]) {
     this.postMessage({
-      kernelId: kernel.id,
+      kernelId: kernel.kernelId,
       type: "console",
       method: "warn",
       data: args,
@@ -131,25 +137,30 @@ export class WorkerKernelManager {
 
   logError(kernel: WorkerKernel, ...args: string[]) {
     this.postMessage({
-      kernelId: kernel.id,
+      kernelId: kernel.kernelId,
       type: "console",
       method: "error",
       data: args,
     });
   }
+}
 
-  /**
-   * Requests one line of user input
-   */
-  input(): string {
-    return "\n";
+declare global {
+  interface WorkerGlobalScope {
+    /**
+     * The object managing all the kernels in this web worker
+     */
+    manager: KernelManager;
   }
 }
+
+// @ts-ignore
+globalThis.manager = new KernelManager();
 
 /**
  * Every message has an id to identify the communication and a type
  */
-export type WorkerMessage =
+export type KernelManagerMessage =
   | {
       type: "initialize";
       asyncMemory?: {
@@ -161,15 +172,15 @@ export type WorkerMessage =
     }
   | {
       type: "import-kernel";
-      id: string;
+      kernelId: string;
       url: string;
       className: string;
       options: any;
     }
   | {
       type: "run";
-      id: string;
       kernelId: string;
+      id: string;
       code: string;
     }
   | {
@@ -181,14 +192,14 @@ export type WorkerMessage =
 /**
  * Every response has an id to identify the communication and a type
  */
-export type WorkerResponse =
+export type KernelManagerResponse =
   | {
       type: "kernel-initialized";
-      id: string;
       kernelId: string;
     }
   | {
       type: "result";
+      kernelId: string;
       id: string;
       value: any;
     }
@@ -200,6 +211,7 @@ export type WorkerResponse =
     }
   | {
       type: "error";
+      kernelId: string;
       id: string;
       error: string;
     }
@@ -211,31 +223,21 @@ export type WorkerResponse =
   | ProxyMessage;
 
 /**
- * A single kernel, usually for a specific cell type.
- *
- * Warning: Worker-kernels shouldn't import this class. Instead, they should `extends globalThis.WorkerKernel`
+ * A single kernel, usually for a specific cell type. Make sure to expose it in the global scope
  */
 export interface WorkerKernel {
   /**
    * Runtime ID to uniquely identify this kernel when sending messages
    */
-  readonly id: string;
-
-  new (options: { id: string; [key: string]: any }): WorkerKernel;
+  readonly kernelId: string;
 
   init(): Promise<any>;
   runCode(code: string): Promise<any>;
   customMessage(message: any): void;
 }
 
-declare global {
-  interface WorkerGlobalScope {
-    /**
-     * The object managing all the kernels in this web worker
-     */
-    manager: WorkerKernelManager;
-  }
-}
+declare var WorkerKernel: {
+  new (options: { id: string; [key: string]: any }): WorkerKernel;
+};
 
-// @ts-ignore
-globalThis.manager = new WorkerKernelManager();
+// export as namespace manager;

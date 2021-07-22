@@ -87,6 +87,10 @@ export class ObjectProxyHost {
   // A serializePostMessage isn't needed here, because all we're ever going to pass to the worker are ids
 
   serializeMemory(value: any, memory: AsyncMemory) {
+    // Format:
+    // [1 byte][n bytes ]
+    // [type  ][data    ]
+
     memory.writeSize(8); // Anything that fits into 8 bytes is fine
 
     // Simple primitives. Guaranteed to fit into the shared memory.

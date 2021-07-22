@@ -20,6 +20,18 @@ const css = () => {
 
 export default [
   {
+    input: `src/worker/kernel.ts`,
+    output: [{ file: "dist/kernel.js", format: "es" }],
+    plugins: [
+      resolve(),
+      typescript({
+        tsconfig: "./src/worker/tsconfig.json",
+        include: ["./src/**/*.ts"],
+      }),
+      commonjs(),
+    ],
+  },
+  {
     input: `src/worker/pyodide-worker.ts`,
     output: [{ file: "dist/pyodide-worker.js", format: "es" }],
     plugins: [
