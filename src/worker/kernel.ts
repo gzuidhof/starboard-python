@@ -36,9 +36,7 @@ class KernelManager {
             this.proxy = new ObjectProxyClient(this.asyncMemory, (message) => {
               this.postMessage(message);
             });
-            if (data.globalThisId) {
-              this.proxiedGlobalThis = this.proxy.getObjectProxy(data.globalThisId);
-            }
+            this.proxiedGlobalThis = this.proxyGlobalThis(data.globalThisId);
             if (data.getInputId) {
               this.input = this.proxy.getObjectProxy(data.getInputId);
             }
@@ -110,6 +108,51 @@ class KernelManager {
           break;
         }
       }
+    });
+  }
+
+  private proxyGlobalThis(id?: string) {
+    // Special cases for the globalThis object. We don't need to proxy everything
+
+    const obj = this.proxy && id ? this.proxy.getObjectProxy(id) : globalThis;
+    const noProxy = new Set<string>([
+      "location",
+      "navigator",
+      "self",
+      "importScripts",
+      "addEventListener",
+      "removeEventListener",
+      "caches",
+      "crypto",
+      "indexedDB",
+      "isSecureContext",
+      "origin",
+      "performance",
+      "atob",
+      "btoa",
+      "clearInterval",
+      "clearTimeout",
+      "createImageBitmap",
+      "fetch",
+      "queueMicrotask",
+      "setInterval",
+      "setTimeout",
+    ]);
+    return new Proxy(obj, {
+      get(target, prop, receiver) {
+        if (typeof prop === "string" && noProxy.has(prop)) {
+          target = globalThis;
+        }
+
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== "function") return value;
+        return new Proxy(value, {
+          apply(_, thisArg, args) {
+            const calledWithProxy = thisArg === receiver;
+            return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
+          },
+        });
+      },
     });
   }
 

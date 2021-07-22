@@ -252,6 +252,7 @@ export class ObjectProxyClient {
     } else if (value[this.objectId]) {
       return { id: value[this.objectId] };
     } else {
+      // Maybe serialize simple functions https://stackoverflow.com/questions/1833588/javascript-clone-a-function
       return { value: value }; // Might fail to get serialized
     }
   }
