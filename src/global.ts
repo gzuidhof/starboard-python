@@ -214,7 +214,7 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
     options: {
       artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
     } as PyodideWorkerOptions,
-    url: workerUrl ?? new URL("pyodide-worker.js", import.meta.url),
+    url: workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
   } as KernelManagerMessage);
 
   await pyodideLoadSingleton;

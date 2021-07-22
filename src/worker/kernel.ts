@@ -22,12 +22,13 @@ class KernelManager {
    */
   input = () => "\n";
 
-  KernelManager() {
+  constructor() {
     self.addEventListener("message", async (e: MessageEvent) => {
       if (!e.data) {
         console.warn("Kernel worker received unexpected message:", e);
         return;
       }
+      console.log(e.data);
       const data = e.data as KernelManagerMessage;
       switch (data.type) {
         case "initialize": {
