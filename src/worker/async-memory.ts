@@ -58,47 +58,42 @@ export class AsyncMemory {
     }
   }
 
+  /**
+   * Should be called from the worker thread
+   */
   lock() {
     this.lockWorker();
     this.lockSize();
     Atomics.store(this.lockAndSize, AsyncMemory.SIZE_INDEX, 0);
   }
 
+  /**
+   * Should be called from the worker thread
+   */
   lockWorker() {
-    while (true) {
-      const oldValue = Atomics.compareExchange(
-        this.lockAndSize,
-        AsyncMemory.LOCK_WORKER_INDEX,
-        AsyncMemory.UNLOCKED, // old value
-        AsyncMemory.LOCKED // new value
-      );
-      if (oldValue === AsyncMemory.UNLOCKED) {
-        return;
-      }
-      Atomics.wait(
-        this.lockAndSize,
-        AsyncMemory.LOCK_WORKER_INDEX,
-        AsyncMemory.LOCKED // another thread is holding the lock
-      );
+    const oldValue = Atomics.compareExchange(
+      this.lockAndSize,
+      AsyncMemory.LOCK_WORKER_INDEX,
+      AsyncMemory.UNLOCKED, // old value
+      AsyncMemory.LOCKED // new value
+    );
+    if (oldValue !== AsyncMemory.UNLOCKED) {
+      throw new Error(`Cannot lock worker, the worker has to be unlocked ${AsyncMemory.UNLOCKED} !== ${oldValue}`);
     }
   }
 
+  /**
+   * Should be called from the worker thread
+   */
   lockSize() {
-    while (true) {
-      const oldValue = Atomics.compareExchange(
-        this.lockAndSize,
-        AsyncMemory.LOCK_SIZE_INDEX,
-        AsyncMemory.UNLOCKED, // old value
-        AsyncMemory.LOCKED // new value
-      );
-      if (oldValue === AsyncMemory.UNLOCKED) {
-        return;
-      }
-      Atomics.wait(
-        this.lockAndSize,
-        AsyncMemory.LOCK_SIZE_INDEX,
-        AsyncMemory.LOCKED // another thread is holding the lock
-      );
+    const oldValue = Atomics.compareExchange(
+      this.lockAndSize,
+      AsyncMemory.LOCK_SIZE_INDEX,
+      AsyncMemory.UNLOCKED, // old value
+      AsyncMemory.LOCKED // new value
+    );
+    if (oldValue !== AsyncMemory.UNLOCKED) {
+      throw new Error(`Cannot set size flag, the size has to be unlocked ${AsyncMemory.UNLOCKED} !== ${oldValue}`);
     }
   }
 

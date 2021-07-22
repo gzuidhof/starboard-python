@@ -386,6 +386,7 @@ export class ObjectProxyClient {
           },
         });
       },
+      // TODO: Those functions might be interesting as well
       /*set(target, prop, value, receiver) {
         // return Reflect.set(target, prop, value, receiver);
         return client.proxyReflect("set", id, [prop, value, receiver]);
