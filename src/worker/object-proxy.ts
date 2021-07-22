@@ -10,10 +10,28 @@ const SERIALIZATION = {
   TRUE: 3,
   NUMBER: 4,
   DATE: 5,
+  KNOWN_SYMBOL: 6,
   STRING: 10,
   BIGINT: 11,
   OBJECT: 255,
 } as const;
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol
+const KNOWN_SYMBOLS = [
+  Symbol.asyncIterator,
+  Symbol.hasInstance,
+  Symbol.isConcatSpreadable,
+  Symbol.iterator,
+  Symbol.match,
+  Symbol.matchAll,
+  Symbol.replace,
+  Symbol.search,
+  Symbol.species,
+  Symbol.split,
+  Symbol.toPrimitive,
+  Symbol.toStringTag,
+  Symbol.unscopables,
+];
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8");
@@ -115,6 +133,10 @@ export class ObjectProxyHost {
       const time = value.getTime();
       memory.memory.set(encodeFloat(time), 1);
       memory.unlockSize();
+    } else if (typeof value === "symbol" && KNOWN_SYMBOLS.includes(value)) {
+      memory.memory[0] = SERIALIZATION.KNOWN_SYMBOL;
+      memory.memory[1] = KNOWN_SYMBOLS.indexOf(value);
+      memory.unlockSize();
     }
     // Variable length primitives. Not guaranteed to fit into the shared memory, but we know their size.
     else if (typeof value === "string") {
@@ -174,6 +196,7 @@ export class ObjectProxyHost {
       // Special cases
       if (value.id) return this.getObject(value.id);
       if (value.value) return value.value;
+      if (value.symbol) return KNOWN_SYMBOLS[value.symbol];
     }
     // It's a primitive
     return value;
@@ -218,6 +241,8 @@ export class ObjectProxyClient {
   serializePostMessage(value: any): any {
     if (isSimplePrimitive(value)) {
       return value;
+    } else if (isSymbolPrimitive(value)) {
+      return { symbol: KNOWN_SYMBOLS.indexOf(value) };
     } else if (isVariableLengthPrimitive(value)) {
       return value;
     } else if (value[this.objectId]) {
@@ -270,6 +295,9 @@ export class ObjectProxyClient {
       const date = new Date();
       date.setTime(decodeFloat(resultBytes.subarray(1, 9)));
       return date;
+    } else if (resultBytes[0] === SERIALIZATION.KNOWN_SYMBOL) {
+      const symbol = KNOWN_SYMBOLS[resultBytes[1]];
+      return symbol;
     }
     // Variable length primitives. We already read all of their data
     else if (resultBytes[0] === SERIALIZATION.STRING) {
@@ -291,12 +319,12 @@ export class ObjectProxyClient {
    * Calls a Reflect function on an object from the other thread
    * @returns The result of the operation, can be a primitive or a proxy
    */
-  private proxyReflect(method: keyof typeof Reflect, target: any, args: any[]) {
+  private proxyReflect(method: keyof typeof Reflect, targetId: string, args: any[]) {
     this.memory.lock();
     this.postMessage({
       type: "proxy-reflect",
       method: method,
-      target: this.serializePostMessage(target),
+      target: targetId,
       arguments: args.map((v) => this.serializePostMessage(v)),
     });
     this.memory.waitForSize();
@@ -326,7 +354,7 @@ export class ObjectProxyClient {
           }
 
           /* const value = Reflect.get(target, prop, receiver); */
-          const value = client.proxyReflect("get", target, [prop, receiver]);
+          const value = client.proxyReflect("get", id, [prop, receiver]);
 
           if (typeof value !== "function") return value;
           /* Functions need special handling
@@ -343,7 +371,7 @@ export class ObjectProxyClient {
               const calledWithProxy = thisArg === receiver;
 
               /* return Reflect.apply(value, calledWithProxy ? target : thisArg, args); */
-              const value = client.proxyReflect("apply", calledWithProxy ? target : thisArg, args ?? []);
+              const value = client.proxyReflect("apply", calledWithProxy ? id : thisArg[client.objectId], args ?? []);
               return value;
             },
           });
@@ -408,6 +436,13 @@ function isSimplePrimitive(value: any) {
   } else {
     return false;
   }
+}
+
+function isSymbolPrimitive(value: any) {
+  if (typeof value === "symbol" && KNOWN_SYMBOLS.includes(value)) {
+    return true;
+  }
+  return false;
 }
 
 function isVariableLengthPrimitive(value: any) {

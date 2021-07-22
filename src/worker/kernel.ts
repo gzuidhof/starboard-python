@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from "uuid";
 import { AsyncMemory } from "./async-memory";
 import { ObjectProxyClient, ProxyMessage } from "./object-proxy";
 
