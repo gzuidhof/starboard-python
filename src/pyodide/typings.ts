@@ -11,6 +11,8 @@ export declare type Pyodide = {
   checkABI: any;
   _module: any;
   isPyProxy(v: any): boolean;
+
+  PythonError: any;
 };
 
 // https://pyodide.org/en/stable/usage/api/js-api.html

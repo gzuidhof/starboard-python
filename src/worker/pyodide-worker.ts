@@ -99,11 +99,13 @@ class PyodideKernel implements WorkerKernel {
       } else {
         const temp = result;
         result = result.toJs();
+        this.destroyToJsResult(result);
         temp?.destroy();
         console.log("Converted result ", { result });
       }
+    } else if (result instanceof self.pyodide.PythonError) {
+      result = result + "";
     }
-    // TODO: Handle PythonError object (and check if there are other objects like that)
 
     return {
       display: displayType,
@@ -136,6 +138,21 @@ class PyodideKernel implements WorkerKernel {
     }
     return stdin;
   }
+
+  private destroyToJsResult(x: any) {
+    if (!x) {
+      return;
+    }
+    if (self.pyodide.isPyProxy(x)) {
+      x.destroy();
+      return;
+    }
+    if (x[Symbol.iterator]) {
+      for (let k of x) {
+        this.destroyToJsResult(k);
+      }
+    }
+  }
 }
 
 // @ts-ignore
@@ -158,19 +175,3 @@ globalThis.PyodideKernel = PyodideKernel;
  * ## Relevant issues for documentation/commenting
  * https://github.com/pyodide/pyodide/issues/1504
  */
-
-/*
-function destroyToJsResult(x){
-    if(!x){
-        return;
-    }
-    if(pyodide.isPyProxy(x)){
-        x.destroy();
-        return;
-    }
-    if(x[Symbol.iterator]){
-        for(let k of x){
-            destroyToJsResult(k);
-        }
-    }
-}*/
