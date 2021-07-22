@@ -7,9 +7,9 @@ function assertUnreachable(_x: never): never {
 }
 
 /**
- * Manages all the kernels in this worker. Please only `import type {}` this class
+ * Manages all the kernels in this worker.
  */
-export class KernelManager {
+class KernelManager {
   readonly kernels = new Map<string, WorkerKernel>();
 
   asyncMemory: AsyncMemory | undefined;
@@ -145,12 +145,15 @@ export class KernelManager {
   }
 }
 
+// https://stackoverflow.com/questions/49392409/in-typescript-how-to-export-the-type-of-a-private-class-without-exporting-class
+export type KernelManagerType = InstanceType<typeof KernelManager>;
+
 declare global {
   interface WorkerGlobalScope {
     /**
      * The object managing all the kernels in this web worker
      */
-    manager: KernelManager;
+    manager: KernelManagerType;
   }
 }
 
