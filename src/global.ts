@@ -106,7 +106,7 @@ function loadKernelManager() {
   const objectProxyHost = asyncMemory ? new ObjectProxyHost(asyncMemory) : null;
   const globalThisId = objectProxyHost?.registerRootObject(globalThis);
   const getInputId = objectProxyHost?.registerRootObject(() => {
-    prompt();
+    return prompt();
   });
 
   worker.addEventListener("message", (ev) => {
