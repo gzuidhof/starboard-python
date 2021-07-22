@@ -45,7 +45,7 @@ class PyodideKernel implements WorkerKernel {
     /* self.importScripts(artifactsURL + "pyodide.js"); // Not used, we're importing our own pyodide.ts*/
 
     if (!self.manager.proxy) {
-      console.warn("Missing objcet proxy, some Pyodide functionality will be restricted");
+      console.warn("Missing object proxy, some Pyodide functionality will be restricted");
     }
 
     (self.pyodide as any).matplotlibHelpers = {

@@ -142,15 +142,13 @@ export class ObjectProxyHost {
     else if (typeof value === "string") {
       memory.memory[0] = SERIALIZATION.STRING;
       // A string encoded in utf-8 uses at most 4 bytes per character
-      // Actually, I could use the encodeInto API and then check if {read} < string.length
       if (value.length * 4 <= memory.memory.byteLength) {
-        const { written } = textEncoder.encodeInto(value, memory.memory.subarray(1)); // TODO: Wait what the heck, this doesn't work on Opera?
-        if (written === undefined) {
-          throw new Error("Text encoder failed to report the number of written bytes");
-        }
-        memory.writeSize(written);
+        const data = textEncoder.encode(value);
+        memory.memory.set(data, 1);
+        memory.writeSize(data.byteLength);
         memory.unlockSize();
       } else {
+        // Longer strings need to be sent piece by piece
         const bytes = textEncoder.encode(value);
         const memorySize = memory.memory.byteLength;
         let offset = 0;
@@ -182,8 +180,9 @@ export class ObjectProxyHost {
     else {
       memory.memory[0] = SERIALIZATION.OBJECT;
       const id = this.registerTempObject(value);
-      const { written } = textEncoder.encodeInto(id, memory.memory.subarray(1));
-      memory.writeSize(written ?? 128);
+      const data = textEncoder.encode(id);
+      memory.memory.set(data, 1);
+      memory.writeSize(data.byteLength);
       memory.unlockSize();
     }
   }
