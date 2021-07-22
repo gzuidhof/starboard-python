@@ -7,7 +7,7 @@ function assertUnreachable(_x: never): never {
 }
 
 /**
- * Manages all the kernels in this worker
+ * Manages all the kernels in this worker. Please only `import type {}` this class
  */
 export class WorkerKernelManager {
   readonly kernels = new Map<string, WorkerKernel>();
@@ -48,6 +48,9 @@ export class WorkerKernelManager {
           try {
             importScripts(data.url);
             const kernelClass = (globalThis as any)[data.className];
+            if (!data.options.id) {
+              data.options.id = uuidv4();
+            }
             const kernel: WorkerKernel = new kernelClass(data.options);
             this.kernels.set(kernel.id, kernel);
             kernel.init().then(() => {
@@ -144,11 +147,6 @@ export class WorkerKernelManager {
 }
 
 /**
- * The object managing all the kernels in this web worker
- */
-export const manager = new WorkerKernelManager();
-
-/**
  * Every message has an id to identify the communication and a type
  */
 export type WorkerMessage =
@@ -217,27 +215,27 @@ export type WorkerResponse =
  *
  * Warning: Worker-kernels shouldn't import this class. Instead, they should `extends globalThis.WorkerKernel`
  */
-export abstract class WorkerKernel {
+export interface WorkerKernel {
   /**
    * Runtime ID to uniquely identify this kernel when sending messages
    */
   readonly id: string;
 
-  constructor(options: any) {
-    this.id = uuidv4();
-  }
+  new (options: { id: string; [key: string]: any }): WorkerKernel;
 
-  abstract init(): Promise<any>;
-  abstract runCode(code: string): Promise<any>;
-
-  abstract customMessage(message: any): void;
+  init(): Promise<any>;
+  runCode(code: string): Promise<any>;
+  customMessage(message: any): void;
 }
 
 declare global {
   interface WorkerGlobalScope {
-    WorkerKernel: typeof WorkerKernel;
+    /**
+     * The object managing all the kernels in this web worker
+     */
+    manager: WorkerKernelManager;
   }
 }
 
 // @ts-ignore
-globalThis.WorkerKernel = WorkerKernel;
+globalThis.manager = new WorkerKernelManager();
