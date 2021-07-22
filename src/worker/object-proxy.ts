@@ -203,11 +203,16 @@ export class ObjectProxyHost {
 
   handleProxyMessage(message: ProxyMessage, memory: AsyncMemory) {
     if (message.type === "proxy-reflect") {
-      const method = Reflect[message.method];
-      const args = (message.arguments ?? []).map((v) => this.deserializePostMessage(v));
-      const result = (method as any)(this.getObject(message.target), ...args);
-      // Write result to shared memory
-      this.serializeMemory(result, memory);
+      try {
+        const method = Reflect[message.method];
+        const args = (message.arguments ?? []).map((v) => this.deserializePostMessage(v));
+        const result = (method as any)(this.getObject(message.target), ...args);
+        // Write result to shared memory
+        this.serializeMemory(result, memory);
+      } catch (e) {
+        console.error(message);
+        throw e;
+      }
     } else if (message.type === "proxy-shared-memory") {
       // Write remaining data to shared memory
       if (this.writeMemoryContinuation === undefined) {
@@ -300,13 +305,14 @@ export class ObjectProxyClient {
     }
     // Variable length primitives. We already read all of their data
     else if (resultBytes[0] === SERIALIZATION.STRING) {
-      return textDecoder.decode(resultBytes.subarray(1));
+      // Note: This *copies* the entire thing, because you aren't allowed to call decode on a SharedArrayBuffer
+      return textDecoder.decode(resultBytes.slice(1, numberOfBytes + 1));
     } else if (resultBytes[0] === SERIALIZATION.BIGINT) {
-      return BigInt(textDecoder.decode(resultBytes.subarray(1)));
+      return BigInt(textDecoder.decode(resultBytes.slice(1, numberOfBytes + 1)));
     }
     // Object. Serialized as ID, guaranteed to fit into shared memory
     else if (resultBytes[0] === SERIALIZATION.OBJECT) {
-      const id = textDecoder.decode(resultBytes.subarray(1));
+      const id = textDecoder.decode(resultBytes.slice(1, numberOfBytes + 1));
       return this.getObjectProxy(id);
     } else {
       console.warn("Unknown type", resultBytes[0]);
@@ -319,17 +325,22 @@ export class ObjectProxyClient {
    * @returns The result of the operation, can be a primitive or a proxy
    */
   private proxyReflect(method: keyof typeof Reflect, targetId: string, args: any[]) {
-    this.memory.lock();
-    this.postMessage({
-      type: "proxy-reflect",
-      method: method,
-      target: targetId,
-      arguments: args.map((v) => this.serializePostMessage(v)),
-    });
-    this.memory.waitForSize();
-    const value = this.deserializeMemory(this.memory);
-    this.memory.unlockWorker();
-    return value;
+    try {
+      this.memory.lock();
+      this.postMessage({
+        type: "proxy-reflect",
+        method: method,
+        target: targetId,
+        arguments: args.map((v) => this.serializePostMessage(v)),
+      });
+      this.memory.waitForSize();
+      const value = this.deserializeMemory(this.memory);
+
+      this.memory.unlockWorker();
+      return value;
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   /** Checks if an id encodes a function. Mostly a silly hack to ensure that proxies can work as expected */
