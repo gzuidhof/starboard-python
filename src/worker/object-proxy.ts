@@ -340,6 +340,7 @@ export class ObjectProxyClient {
       this.memory.unlockWorker();
       return value;
     } catch (e) {
+      console.error({ method, targetId, args });
       console.error(e);
     }
   }
