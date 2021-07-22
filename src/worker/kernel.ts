@@ -1,5 +1,5 @@
 import { AsyncMemory } from "./async-memory";
-import { ObjectProxyClient, ProxyMessage } from "./object-proxy";
+import { ObjectId, ObjectProxyClient, ProxyMessage } from "./object-proxy";
 
 function assertUnreachable(_x: never): never {
   throw new Error("This case should have never been reached");
@@ -186,6 +186,8 @@ class KernelManager {
       data: args,
     });
   }
+
+  [ObjectId] = "";
 }
 
 // https://stackoverflow.com/questions/49392409/in-typescript-how-to-export-the-type-of-a-private-class-without-exporting-class

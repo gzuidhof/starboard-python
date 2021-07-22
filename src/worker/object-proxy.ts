@@ -226,12 +226,12 @@ export class ObjectProxyHost {
   }
 }
 
+export const ObjectId = Symbol("id");
 /**
  * Allows this thread to access objects from another thread.
  * Must run on a worker thread.
  */
 export class ObjectProxyClient {
-  readonly objectId = Symbol("id");
   readonly memory: AsyncMemory;
   readonly postMessage: (message: ProxyMessage) => void;
   constructor(memory: AsyncMemory, postMessage: (message: ProxyMessage) => void) {
@@ -249,8 +249,8 @@ export class ObjectProxyClient {
       return { symbol: KNOWN_SYMBOLS.indexOf(value) };
     } else if (isVariableLengthPrimitive(value)) {
       return value;
-    } else if (value[this.objectId]) {
-      return { id: value[this.objectId] };
+    } else if (value[ObjectId] !== undefined) {
+      return { id: value[ObjectId] };
     } else {
       // Maybe serialize simple functions https://stackoverflow.com/questions/1833588/javascript-clone-a-function
       return { value: value }; // Might fail to get serialized
@@ -357,9 +357,9 @@ export class ObjectProxyClient {
     // TODO: deep proxy https://github.com/samvv/js-proxy-deep
     const client = this;
 
-    return new Proxy(this.isFunction(id) ? () => {} : {}, {
+    return new Proxy(this.isFunction(id) ? function () {} : {}, {
       get(target, prop, receiver) {
-        if (prop === client.objectId) {
+        if (prop === ObjectId) {
           return id;
         }
 
@@ -377,11 +377,11 @@ export class ObjectProxyClient {
             // receiver: the object the propery was gotten from. Is always the proxy or something inheriting from the proxy
             // target: the original object
 
-            // TODO: Or maybe thisArg[client.objectId] === receiver[client.objectId]?
+            // TODO: Or maybe thisArg[ObjectId] === receiver[ObjectId]?
             const calledWithProxy = thisArg === receiver;
 
             // return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
-            const value = client.proxyReflect("apply", calledWithProxy ? id : thisArg[client.objectId], args ?? []);
+            const value = client.proxyReflect("apply", calledWithProxy ? id : thisArg[ObjectId], args ?? []);
             return value;
           },
         });
@@ -429,6 +429,8 @@ export class ObjectProxyClient {
 
       // For function objects
       apply(target, thisArg, argumentsList) {
+        // Note: It can happen that a function gets called with a thisArg that cannot be serialized (due to it being an object on the worker thread)
+        // One solution is to provide a `[ObjectId]: ""` property
         // return Reflect.apply(target, thisArg, argumentsList);
         return client.proxyReflect("apply", id, [thisArg, argumentsList]);
       },
