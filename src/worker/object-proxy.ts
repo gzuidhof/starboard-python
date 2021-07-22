@@ -355,78 +355,86 @@ export class ObjectProxyClient {
     // TODO: deep proxy https://github.com/samvv/js-proxy-deep
     const client = this;
 
-    return new Proxy(
-      {},
-      {
-        get(target, prop, receiver) {
-          if (prop === client.objectId) {
-            return id;
-          }
+    return new Proxy(this.isFunction(id) ? () => {} : {}, {
+      get(target, prop, receiver) {
+        if (prop === client.objectId) {
+          return id;
+        }
 
-          /* const value = Reflect.get(target, prop, receiver); */
-          const value = client.proxyReflect("get", id, [prop, receiver]);
+        // const value = Reflect.get(target, prop, receiver);
+        const value = client.proxyReflect("get", id, [prop, receiver]);
 
-          if (typeof value !== "function") return value;
-          /* Functions need special handling
-           * https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
-           * https://stackoverflow.com/questions/37092179/javascript-proxy-objects-dont-work
-           */
-          return new Proxy(value, {
-            apply(_, thisArg, args) {
-              // thisArg: the object the function was called with. Can be the proxy or something else
-              // receiver: the object the propery was gotten from. Is always the proxy or something inheriting from the proxy
-              // target: the original object
+        if (typeof value !== "function") return value;
+        /* Functions need special handling
+         * https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
+         * https://stackoverflow.com/questions/37092179/javascript-proxy-objects-dont-work
+         */
+        return new Proxy(value, {
+          apply(_, thisArg, args) {
+            // thisArg: the object the function was called with. Can be the proxy or something else
+            // receiver: the object the propery was gotten from. Is always the proxy or something inheriting from the proxy
+            // target: the original object
 
-              // TODO: Or maybe thisArg[client.objectId] === receiver[client.objectId]?
-              const calledWithProxy = thisArg === receiver;
+            // TODO: Or maybe thisArg[client.objectId] === receiver[client.objectId]?
+            const calledWithProxy = thisArg === receiver;
 
-              /* return Reflect.apply(value, calledWithProxy ? target : thisArg, args); */
-              const value = client.proxyReflect("apply", calledWithProxy ? id : thisArg[client.objectId], args ?? []);
-              return value;
-            },
-          });
-        },
-        // TODO:
-        /*set(target, prop, value, receiver) {
-        return Reflect.set(target, prop, value, receiver);
+            // return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
+            const value = client.proxyReflect("apply", calledWithProxy ? id : thisArg[client.objectId], args ?? []);
+            return value;
+          },
+        });
+      },
+      /*set(target, prop, value, receiver) {
+        // return Reflect.set(target, prop, value, receiver);
+        return client.proxyReflect("set", id, [prop, value, receiver]);
       },
       ownKeys(target) {
-        return Reflect.ownKeys(target);
+        // return Reflect.ownKeys(target);
+        return client.proxyReflect("ownKeys", id, []);
       },
       has(target, prop) {
-        return Reflect.has(target, prop);
+        // return Reflect.has(target, prop);
+        return client.proxyReflect("has", id, [prop]);
       },
       defineProperty(target, prop, attributes) {
-        return Reflect.defineProperty(target, prop, attributes);
+        // return Reflect.defineProperty(target, prop, attributes);
+        return client.proxyReflect("defineProperty", id, [prop, attributes]);
       },
       deleteProperty(target, prop) {
-        return Reflect.deleteProperty(target, prop);
+        // return Reflect.deleteProperty(target, prop);
+        return client.proxyReflect("deleteProperty", id, [prop]);
       },
       getOwnPropertyDescriptor(target, prop) {
-        return Reflect.getOwnPropertyDescriptor(target, prop);
+        // return Reflect.getOwnPropertyDescriptor(target, prop);
+        return client.proxyReflect("getOwnPropertyDescriptor", id, [prop]);
       },
       isExtensible(target) {
-        return Reflect.isExtensible(target);
+        // return Reflect.isExtensible(target);
+        return client.proxyReflect("isExtensible", id, []);
       },
       preventExtensions(target) {
-        return Reflect.preventExtensions(target);
+        // return Reflect.preventExtensions(target);
+        return client.proxyReflect("preventExtensions", id, []);
       },
       getPrototypeOf(target) {
-        return Reflect.getPrototypeOf(target);
+        // return Reflect.getPrototypeOf(target);
+        return client.proxyReflect("getPrototypeOf", id, []);
       },
       setPrototypeOf(target, proto) {
-        return Reflect.setPrototypeOf(target, proto);
+        // return Reflect.setPrototypeOf(target, proto);
+        return client.proxyReflect("setPrototypeOf", id, [proto]);
       },*/
 
-        // For function objects (client.isFunction(id))
-        /*apply(target, thisArg, argumentsList) {
-        return Reflect.apply(target, thisArg, argumentsList);
+      // For function objects
+      apply(target, thisArg, argumentsList) {
+        // return Reflect.apply(target, thisArg, argumentsList);
+        return client.proxyReflect("apply", id, [thisArg, argumentsList]);
       },
       construct(target, argumentsList, newTarget) {
-        return Reflect.construct(target, argumentsList, newTarget)
-      }*/
-      }
-    ) as T;
+        // return Reflect.construct(target, argumentsList, newTarget)
+        return client.proxyReflect("construct", id, [argumentsList, newTarget]);
+      },
+    }) as T;
   }
 }
 
