@@ -1,8 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { AsyncMemory } from "./async-memory";
 
-// TODO: Comment here https://github.com/Gaubee/blog/issues/118
-
 const SERIALIZATION = {
   UNDEFINED: 0,
   NULL: 1,
@@ -354,7 +352,6 @@ export class ObjectProxyClient {
    * Gets a proxy object for a given id
    */
   getObjectProxy<T = any>(id: string): T {
-    // TODO: deep proxy https://github.com/samvv/js-proxy-deep
     const client = this;
 
     return new Proxy(this.isFunction(id) ? function () {} : {}, {
@@ -386,8 +383,7 @@ export class ObjectProxyClient {
           },
         });
       },
-      // TODO: Those functions might be interesting as well
-      /*set(target, prop, value, receiver) {
+      set(target, prop, value, receiver) {
         // return Reflect.set(target, prop, value, receiver);
         return client.proxyReflect("set", id, [prop, value, receiver]);
       },
@@ -407,6 +403,8 @@ export class ObjectProxyClient {
         // return Reflect.deleteProperty(target, prop);
         return client.proxyReflect("deleteProperty", id, [prop]);
       },
+      // TODO: Those functions might be interesting as well
+      /*
       getOwnPropertyDescriptor(target, prop) {
         // return Reflect.getOwnPropertyDescriptor(target, prop);
         return client.proxyReflect("getOwnPropertyDescriptor", id, [prop]);
@@ -440,6 +438,34 @@ export class ObjectProxyClient {
         return client.proxyReflect("construct", id, [argumentsList, newTarget]);
       },
     }) as T;
+  }
+
+  /**
+   * Wraps an object in a proxy that does not proxy certain properties
+   */
+  wrapExcluderProxy<T extends object>(obj: T, underlyingObject: T, exclude: Set<string>): T {
+    return new Proxy<T>(obj, {
+      get(target, prop, receiver) {
+        if (typeof prop === "string" && exclude.has(prop)) {
+          target = underlyingObject;
+        }
+
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== "function") return value;
+        return new Proxy(value, {
+          apply(_, thisArg, args) {
+            const calledWithProxy = thisArg === receiver;
+            return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
+          },
+        });
+      },
+      has(target, prop) {
+        if (typeof prop === "string" && exclude.has(prop)) {
+          target = underlyingObject;
+        }
+        return Reflect.has(target, prop);
+      },
+    });
   }
 }
 

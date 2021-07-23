@@ -82,7 +82,7 @@ class KernelManager {
               type: "result",
               kernelId: kernel.kernelId,
               id: data.id,
-              value: result, // TODO: Wrap the result
+              value: result,
             });
           } catch (e) {
             this.postMessage({
@@ -113,8 +113,6 @@ class KernelManager {
 
   private proxyGlobalThis(id?: string) {
     // Special cases for the globalThis object. We don't need to proxy everything
-
-    const obj = this.proxy && id ? this.proxy.getObjectProxy(id) : globalThis;
     const noProxy = new Set<string>([
       "location",
       "navigator",
@@ -138,22 +136,9 @@ class KernelManager {
       "setInterval",
       "setTimeout",
     ]);
-    return new Proxy(obj, {
-      get(target, prop, receiver) {
-        if (typeof prop === "string" && noProxy.has(prop)) {
-          target = globalThis;
-        }
-
-        const value = Reflect.get(target, prop, receiver);
-        if (typeof value !== "function") return value;
-        return new Proxy(value, {
-          apply(_, thisArg, args) {
-            const calledWithProxy = thisArg === receiver;
-            return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
-          },
-        });
-      },
-    });
+    return this.proxy && id
+      ? this.proxy.wrapExcluderProxy(this.proxy.getObjectProxy(id), globalThis, noProxy)
+      : globalThis;
   }
 
   postMessage(message: KernelManagerResponse) {
@@ -280,6 +265,11 @@ export interface WorkerKernel {
   readonly kernelId: string;
 
   init(): Promise<any>;
+
+  /**
+   * Runs code and returns a result
+   * @returns A result that can be sent using postMessage
+   */
   runCode(code: string): Promise<any>;
   customMessage(message: any): void;
 }

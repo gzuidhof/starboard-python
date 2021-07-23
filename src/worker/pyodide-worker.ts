@@ -79,7 +79,7 @@ class PyodideKernel implements WorkerKernel {
         if (self.manager.proxiedGlobalThis) {
           // Fix "from js import ..."
           /* self.pyodide.unregisterJsModule("js"); // Not needed, since register conveniently overwrites existing things */
-          self.pyodide.registerJsModule("js", self.manager.proxiedGlobalThis);
+          self.pyodide.registerJsModule("js", this.proxyGlobalThis(self.manager.proxiedGlobalThis)); // TODO: Or should we register a new module? Like js_main
         }
       });
   }
@@ -137,6 +137,17 @@ class PyodideKernel implements WorkerKernel {
       }
     }
     return stdin;
+  }
+
+  private proxyGlobalThis(obj: any): any {
+    // Special cases for the pyodide globalThis
+    // In some cases, we'll end up with 4 nested proxies (this one, the kernel excluder proxy, the reflect proxy and the Pyodide js proxy)
+    if (self.manager.proxy) {
+      //const noProxy = new Set<string>(["$$", "__name__", "__package__", "__path__", "__loader__"]);
+      //return self.manager.proxy.wrapExcluderProxy(obj, globalThis, noProxy);
+    }
+
+    return obj;
   }
 
   private destroyToJsResult(x: any) {
