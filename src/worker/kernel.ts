@@ -14,8 +14,6 @@ class KernelManager {
   asyncMemory: AsyncMemory | undefined;
   proxy: ObjectProxyClient | undefined;
 
-  proxiedGlobalThis: undefined | any;
-
   /**
    * Requests one line of user input
    */
@@ -36,7 +34,7 @@ class KernelManager {
             this.proxy = new ObjectProxyClient(this.asyncMemory, (message) => {
               this.postMessage(message);
             });
-            this.proxiedGlobalThis = this.proxyGlobalThis(data.globalThisId);
+
             if (data.getInputId) {
               this.input = this.proxy.getObjectProxy(data.getInputId);
             }
@@ -109,36 +107,6 @@ class KernelManager {
         }
       }
     });
-  }
-
-  private proxyGlobalThis(id?: string) {
-    // Special cases for the globalThis object. We don't need to proxy everything
-    const noProxy = new Set<string>([
-      "location",
-      "navigator",
-      "self",
-      "importScripts",
-      "addEventListener",
-      "removeEventListener",
-      "caches",
-      "crypto",
-      "indexedDB",
-      "isSecureContext",
-      "origin",
-      "performance",
-      "atob",
-      "btoa",
-      "clearInterval",
-      "clearTimeout",
-      "createImageBitmap",
-      "fetch",
-      "queueMicrotask",
-      "setInterval",
-      "setTimeout",
-    ]);
-    return this.proxy && id
-      ? this.proxy.wrapExcluderProxy(this.proxy.getObjectProxy(id), globalThis, noProxy)
-      : globalThis;
   }
 
   postMessage(message: KernelManagerResponse) {

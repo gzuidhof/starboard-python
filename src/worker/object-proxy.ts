@@ -443,10 +443,10 @@ export class ObjectProxyClient {
   /**
    * Wraps an object in a proxy that does not proxy certain properties
    */
-  wrapExcluderProxy<T extends object>(obj: T, underlyingObject: T, exclude: Set<string>): T {
+  wrapExcluderProxy<T extends object>(obj: T, underlyingObject: T, exclude: Set<string | symbol>): T {
     return new Proxy<T>(obj, {
       get(target, prop, receiver) {
-        if (typeof prop === "string" && exclude.has(prop)) {
+        if (exclude.has(prop)) {
           target = underlyingObject;
         }
 
@@ -460,7 +460,7 @@ export class ObjectProxyClient {
         });
       },
       has(target, prop) {
-        if (typeof prop === "string" && exclude.has(prop)) {
+        if (exclude.has(prop)) {
           target = underlyingObject;
         }
         return Reflect.has(target, prop);

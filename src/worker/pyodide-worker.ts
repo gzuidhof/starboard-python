@@ -33,12 +33,15 @@ declare global {
 class PyodideKernel implements WorkerKernel {
   kernelId: string;
   options: PyodideWorkerOptions;
+  proxiedGlobalThis: undefined | any;
 
   constructor(options: { id: string } & PyodideWorkerOptions) {
     this.kernelId = options.id;
     this.options = options;
   }
   async init(): Promise<any> {
+    this.proxiedGlobalThis = this.proxyGlobalThis(this.options.globalThisId);
+
     let artifactsURL = this.options.artifactsUrl || "https://cdn.jsdelivr.net/pyodide/v0.17.0/full/";
     if (!artifactsURL.endsWith("/")) artifactsURL += "/";
 
@@ -76,10 +79,10 @@ class PyodideKernel implements WorkerKernel {
         },
       })
       .then(() => {
-        if (self.manager.proxiedGlobalThis) {
+        if (this.proxiedGlobalThis) {
           // Fix "from js import ..."
           /* self.pyodide.unregisterJsModule("js"); // Not needed, since register conveniently overwrites existing things */
-          self.pyodide.registerJsModule("js", this.proxyGlobalThis(self.manager.proxiedGlobalThis)); // TODO: Or should we register a new module? Like js_main
+          self.pyodide.registerJsModule("js", this.proxiedGlobalThis); // TODO: Or should we register a new module? Like js_main
         }
       });
   }
@@ -139,15 +142,55 @@ class PyodideKernel implements WorkerKernel {
     return stdin;
   }
 
-  private proxyGlobalThis(obj: any): any {
-    // Special cases for the pyodide globalThis
-    // In some cases, we'll end up with 4 nested proxies (this one, the kernel excluder proxy, the reflect proxy and the Pyodide js proxy)
-    if (self.manager.proxy) {
-      //const noProxy = new Set<string>(["$$", "__name__", "__package__", "__path__", "__loader__"]);
-      //return self.manager.proxy.wrapExcluderProxy(obj, globalThis, noProxy);
-    }
+  private proxyGlobalThis(id?: string) {
+    // Special cases for the globalThis object. We don't need to proxy everything
+    const noProxy = new Set<string | symbol>([
+      "location",
+      "navigator",
+      "self",
+      "importScripts",
+      "addEventListener",
+      "removeEventListener",
+      "caches",
+      "crypto",
+      "indexedDB",
+      "isSecureContext",
+      "origin",
+      "performance",
+      "atob",
+      "btoa",
+      "clearInterval",
+      "clearTimeout",
+      "createImageBitmap",
+      "fetch",
+      "queueMicrotask",
+      "setInterval",
+      "setTimeout",
 
-    return obj;
+      // Special cases for the pyodide globalThis
+      "$$",
+      "pyodide",
+      "__name__",
+      "__package__",
+      "__path__",
+      "__loader__",
+
+      // Pyodide likes checking for lots of properties, like the .stack property to check if something is an error
+      // https://github.com/pyodide/pyodide/blob/c8436c33a7fbee13e1ded97c0bbdaa7d635f2745/src/core/jsproxy.c#L1631
+      "stack",
+      "get",
+      "set",
+      "has",
+      "size",
+      "length",
+      "then",
+      "includes",
+      "next",
+      Symbol.iterator,
+    ]);
+    return self.manager.proxy && id
+      ? self.manager.proxy.wrapExcluderProxy(self.manager.proxy.getObjectProxy(id), globalThis, noProxy)
+      : globalThis;
   }
 
   private destroyToJsResult(x: any) {

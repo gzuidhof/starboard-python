@@ -104,7 +104,6 @@ function loadKernelManager() {
   // Since all kernels are running in the same worker, they might as well use the same async memory and object proxy
   const asyncMemory = getAsyncMemory();
   const objectProxyHost = asyncMemory ? new ObjectProxyHost(asyncMemory) : null;
-  const globalThisId = objectProxyHost?.registerRootObject(globalThis);
   const getInputId = objectProxyHost?.registerRootObject(() => {
     return prompt();
   });
@@ -131,7 +130,6 @@ function loadKernelManager() {
           dataBuffer: asyncMemory.sharedMemory,
         }
       : undefined,
-    globalThisId: globalThisId,
     getInputId: getInputId,
   } as KernelManagerMessage);
 
@@ -147,7 +145,7 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
   const result = loadKernelManager();
   kernelManager = result.kernelManager;
   objectProxyHost = result.objectProxyHost;
-
+  const globalThisId = objectProxyHost?.registerRootObject(globalThis);
   // Pyodide worker loading
   loadingStatus = "loading";
 
@@ -215,6 +213,7 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
     kernelId: kernelId,
     options: {
       artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
+      globalThisId: globalThisId,
     } as PyodideWorkerOptions,
     url: workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
   } as KernelManagerMessage);

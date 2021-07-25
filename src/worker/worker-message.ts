@@ -1,5 +1,6 @@
 export type PyodideWorkerOptions = {
   artifactsUrl?: string;
+  globalThisId?: string;
 };
 
 export type PyodideWorkerResult = {
