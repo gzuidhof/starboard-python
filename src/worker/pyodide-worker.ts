@@ -87,10 +87,8 @@ class PyodideKernel implements WorkerKernel {
       });
   }
   async runCode(code: string): Promise<any> {
-    console.log("Running ", code);
     let result = await self.pyodide.runPythonAsync(code).catch((error) => error);
     let displayType: PyodideWorkerResult["display"];
-    console.log("Result ", { result });
 
     if (self.pyodide.isPyProxy(result)) {
       if (result._repr_html_ !== undefined) {
@@ -104,7 +102,6 @@ class PyodideKernel implements WorkerKernel {
         result = result.toJs();
         this.destroyToJsResult(result);
         temp?.destroy();
-        console.log("Converted result ", { result });
       }
     } else if (result instanceof self.pyodide.PythonError) {
       result = result + "";
@@ -211,21 +208,3 @@ class PyodideKernel implements WorkerKernel {
 
 // @ts-ignore
 globalThis.PyodideKernel = PyodideKernel;
-
-// TODO: Open a  Starboard kernel issue:
-// - SharedWorker support? (especially for development?)
-// - Interrupting? (Also relevant https://github.com/pyodide/pyodide/pull/852 and https://github.com/pyodide/pyodide/issues/676)
-// - Restarting? ( https://github.com/pyodide/pyodide/issues/703 )
-// - Shared filesystem
-
-// TODO:
-// document that COOP/COEP is required
-
-/**
- * TODO:
- * # Async Python research
- * ## Syncify
- * https://github.com/pyodide/pyodide/pull/1547
- * ## Relevant issues for documentation/commenting
- * https://github.com/pyodide/pyodide/issues/1504
- */

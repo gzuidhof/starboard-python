@@ -39,7 +39,9 @@ class KernelManager {
               this.input = this.proxy.getObjectProxy(data.getInputId);
             }
           } else {
-            console.warn("Missing async memory, accessing objects from the main thread will not work");
+            console.warn(
+              "Missing async memory, accessing objects from the main thread will not work. Please make sure that COOP/COEP is enabled."
+            );
           }
 
           break;

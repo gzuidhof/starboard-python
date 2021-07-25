@@ -61,15 +61,6 @@ export class AsyncMemory {
   /**
    * Should be called from the worker thread
    */
-  lock() {
-    this.lockWorker();
-    this.lockSize();
-    Atomics.store(this.lockAndSize, AsyncMemory.SIZE_INDEX, 0);
-  }
-
-  /**
-   * Should be called from the worker thread
-   */
   lockWorker() {
     const oldValue = Atomics.compareExchange(
       this.lockAndSize,
@@ -131,6 +122,23 @@ export class AsyncMemory {
     );
     if (oldValue != AsyncMemory.LOCKED) {
       throw new Error("Tried to unlock, but was already unlocked");
+    }
+    Atomics.notify(this.lockAndSize, AsyncMemory.LOCK_SIZE_INDEX);
+  }
+
+  /**
+   * Ensures that the size gets unlocked
+   */
+  forceUnlockSize() {
+    const oldValue = Atomics.compareExchange(
+      this.lockAndSize,
+      AsyncMemory.LOCK_SIZE_INDEX,
+      AsyncMemory.LOCKED, // old value
+      AsyncMemory.UNLOCKED // new value
+    );
+    if (oldValue != AsyncMemory.LOCKED) {
+      // And force unlock it
+      Atomics.store(this.lockAndSize, AsyncMemory.LOCK_SIZE_INDEX, AsyncMemory.UNLOCKED);
     }
     Atomics.notify(this.lockAndSize, AsyncMemory.LOCK_SIZE_INDEX);
   }

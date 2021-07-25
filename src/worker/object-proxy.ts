@@ -171,7 +171,7 @@ export class ObjectProxyHost {
       memory.memory[0] = SERIALIZATION.BIGINT;
       const digits = value.toString();
       // TODO: Implement this (just like the text ^)
-      console.warn("Not implemented");
+      console.warn("Bigint support is not implemented");
       memory.unlockSize();
     }
     // Object. Serialized as ID, guaranteed to fit into shared memory
@@ -324,23 +324,29 @@ export class ObjectProxyClient {
    * @returns The result of the operation, can be a primitive or a proxy
    */
   private proxyReflect(method: keyof typeof Reflect, targetId: string, args: any[]) {
+    let value: any = undefined;
     try {
-      this.memory.lock();
+      this.memory.lockWorker();
+      this.memory.lockSize();
+      this.memory.writeSize(0);
       this.postMessage({
         type: "proxy-reflect",
         method: method,
         target: targetId,
         arguments: args.map((v) => this.serializePostMessage(v)),
       });
-      this.memory.waitForSize();
-      const value = this.deserializeMemory(this.memory);
 
-      this.memory.unlockWorker();
-      return value;
+      this.memory.waitForSize();
+      value = this.deserializeMemory(this.memory);
     } catch (e) {
       console.error({ method, targetId, args });
       console.error(e);
+    } finally {
+      // Regardless of what happened, unlock the size and the worker
+      this.memory.forceUnlockSize();
+      this.memory.unlockWorker();
     }
+    return value;
   }
 
   /** Checks if an id encodes a function. Mostly a silly hack to ensure that proxies can work as expected */
