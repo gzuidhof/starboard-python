@@ -25,7 +25,6 @@ class KernelManager {
         console.warn("Kernel worker received unexpected message:", e);
         return;
       }
-      console.log(e.data);
       const data = e.data as KernelManagerMessage;
       switch (data.type) {
         case "initialize": {

@@ -7,7 +7,6 @@ import type { Pyodide as PyodideType } from "../pyodide/typings";
 import type { KernelManagerType, WorkerKernel } from "./kernel";
 import { assertUnreachable } from "../util";
 import { PyodideWorkerOptions, PyodideWorkerResult } from "./worker-message";
-import { intArrayFromString } from "./emscripten-utils";
 
 declare global {
   interface WorkerGlobalScope {
@@ -118,12 +117,13 @@ class PyodideKernel implements WorkerKernel {
   }
 
   createStdin() {
-    let input: number[] = [];
+    const encoder = new TextEncoder();
+    let input = new Uint8Array();
     let inputIndex = -1; // -1 means that we just returned null
     function stdin() {
       if (inputIndex === -1) {
         const text = self.manager.input();
-        input = intArrayFromString(text + (text.endsWith("\n") ? "" : "\n"), true, 0);
+        input = encoder.encode(text + (text.endsWith("\n") ? "" : "\n"));
         inputIndex = 0;
       }
 
