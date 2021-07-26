@@ -234,7 +234,7 @@ export class ObjectProxyHost {
   }
 }
 
-export const ObjectId = Symbol("id");
+export const ObjectId = Symbol.for("id");
 /**
  * Allows this thread to access objects from another thread.
  * Must run on a worker thread.

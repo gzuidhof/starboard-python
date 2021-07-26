@@ -11,7 +11,6 @@ function assertUnreachable(_x: never): never {
 class KernelManager {
   readonly kernels = new Map<string, WorkerKernel>();
 
-  asyncMemory: AsyncMemory | undefined;
   proxy: ObjectProxyClient | undefined;
 
   /**
@@ -29,8 +28,8 @@ class KernelManager {
       switch (data.type) {
         case "initialize": {
           if (data.asyncMemory) {
-            this.asyncMemory = new AsyncMemory(data.asyncMemory.lockBuffer, data.asyncMemory.dataBuffer);
-            this.proxy = new ObjectProxyClient(this.asyncMemory, (message) => {
+            const asyncMemory = new AsyncMemory(data.asyncMemory.lockBuffer, data.asyncMemory.dataBuffer);
+            this.proxy = new ObjectProxyClient(asyncMemory, (message) => {
               this.postMessage(message);
             });
 

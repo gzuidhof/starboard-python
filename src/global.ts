@@ -8,10 +8,12 @@ import type { PyodideWorkerOptions, PyodideWorkerResult } from "./worker/worker-
 import { AsyncMemory } from "./worker/async-memory";
 import type { Runtime } from "starboard-notebook/dist/src/types";
 import { ObjectProxyHost } from "./worker/object-proxy";
+import { mainThreadPyodide } from "./main-thread-pyodide";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted";
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
 let pyodideLoadSingleton: Promise<string> | undefined = undefined;
+let mainThreadPyodideRunner: ((code: string) => Promise<any>) | undefined = undefined;
 let kernelManager: Worker;
 let objectProxyHost: ObjectProxyHost | null = null;
 const runningCode = new Map<string, (value: any) => void>();
@@ -175,7 +177,21 @@ export async function loadPyodide(runtime: Runtime) {
   /** Pyodide Kernel id */
   const kernelId = uuidv4();
 
+  const initOptions: KernelManagerMessage = {
+    type: "import-kernel",
+    className: "PyodideKernel",
+    kernelId: kernelId,
+    options: {
+      artifactsUrl: getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
+      globalThisId: globalThisId,
+      drawCanvasId: drawCanvasId,
+    } as PyodideWorkerOptions,
+    url: getPluginOpts().workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
+  };
+
   if (getPluginOpts().runInMainThread) {
+    pyodideLoadSingleton = Promise.resolve("");
+    mainThreadPyodideRunner = await mainThreadPyodide(initOptions);
   } else {
     pyodideLoadSingleton = new Promise((resolve, reject) => {
       // Only the resolve case is handled for now
@@ -234,17 +250,7 @@ export async function loadPyodide(runtime: Runtime) {
       }
     });
 
-    kernelManager.postMessage({
-      type: "import-kernel",
-      className: "PyodideKernel",
-      kernelId: kernelId,
-      options: {
-        artifactsUrl: getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
-        globalThisId: globalThisId,
-        drawCanvasId: drawCanvasId,
-      } as PyodideWorkerOptions,
-      url: getPluginOpts().workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
-    } as KernelManagerMessage);
+    kernelManager.postMessage(initOptions);
   }
   await pyodideLoadSingleton;
   loadingStatus = "ready";
@@ -256,10 +262,16 @@ export function getPyodideLoadingStatus() {
   return loadingStatus;
 }
 
-export async function runPythonAsync(code: string, data?: { [key: string]: any }) {
+export async function runPythonAsync(code: string) {
   if (!pyodideLoadSingleton) return;
 
   if (getPluginOpts().runInMainThread) {
+    if (mainThreadPyodideRunner) {
+      return mainThreadPyodideRunner(code);
+    } else {
+      console.error("Missing main thread pyodide");
+      return null;
+    }
   } else {
     const kernelId = await pyodideLoadSingleton;
     const id = uuidv4();
@@ -277,7 +289,7 @@ export async function runPythonAsync(code: string, data?: { [key: string]: any }
           code: code,
         } as KernelManagerMessage);
       } catch (e) {
-        console.warn(e, data);
+        console.warn(e, code);
         reject(e);
         runningCode.delete(id);
       }
