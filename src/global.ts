@@ -160,88 +160,92 @@ function loadKernelManager() {
   };
 }
 
-export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, workerUrl?: string) {
+export async function loadPyodide(runtime: Runtime) {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
-  const result = loadKernelManager();
-  kernelManager = result.kernelManager;
-  objectProxyHost = result.objectProxyHost;
+  const kernelManagerResult = loadKernelManager();
+  kernelManager = kernelManagerResult.kernelManager;
+  objectProxyHost = kernelManagerResult.objectProxyHost;
+
   const globalThisId = objectProxyHost?.registerRootObject(globalThis);
   const drawCanvasId = objectProxyHost?.registerRootObject(drawCanvas);
   // Pyodide worker loading
   loadingStatus = "loading";
 
+  /** Pyodide Kernel id */
   const kernelId = uuidv4();
 
-  pyodideLoadSingleton = new Promise((resolve, reject) => {
-    // Only the resolve case is handled for now
-    function handleInitMessage(ev: MessageEvent<any>) {
-      if (!ev.data) return;
-      const data = ev.data as KernelManagerResponse;
-      if (data.type === "kernel-initialized" && data.kernelId === kernelId) {
-        kernelManager.removeEventListener("message", handleInitMessage);
+  if (getPluginOpts().runInMainThread) {
+  } else {
+    pyodideLoadSingleton = new Promise((resolve, reject) => {
+      // Only the resolve case is handled for now
+      function handleInitMessage(ev: MessageEvent<any>) {
+        if (!ev.data) return;
+        const data = ev.data as KernelManagerResponse;
+        if (data.type === "kernel-initialized" && data.kernelId === kernelId) {
+          kernelManager.removeEventListener("message", handleInitMessage);
 
-        resolve(kernelId);
-      }
-    }
-    kernelManager.addEventListener("message", handleInitMessage);
-  });
-
-  kernelManager.addEventListener("message", (e) => {
-    if (!e.data) return;
-
-    const data = e.data as KernelManagerResponse;
-    switch (data.type) {
-      case "result": {
-        if (data.kernelId !== kernelId) break;
-        const callback = runningCode.get(data.id);
-        if (!callback) {
-          console.warn("Missing Python callback");
-        } else {
-          convertResult(runtime, data.value as PyodideWorkerResult).then(callback);
+          resolve(kernelId);
         }
-        objectProxyHost?.clearTemporary();
-        break;
       }
-      case "console": {
-        if (data.kernelId !== kernelId) break;
-        (console as any)?.[data.method](...data.data);
-        break;
-      }
-      case "error": {
-        if (data.kernelId !== kernelId) break;
-        console.error(data.error);
-      }
-      case "custom": {
-        if (data.kernelId !== kernelId) break;
-        // No custom messages so far
-        break;
-      }
-      // Ignore
-      case "kernel-initialized":
-      case "proxy-reflect":
-      case "proxy-shared-memory":
-      case "proxy-print-object": {
-        break;
-      }
-      default: {
-        assertUnreachable(data);
-      }
-    }
-  });
+      kernelManager.addEventListener("message", handleInitMessage);
+    });
 
-  kernelManager.postMessage({
-    type: "import-kernel",
-    className: "PyodideKernel",
-    kernelId: kernelId,
-    options: {
-      artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
-      globalThisId: globalThisId,
-      drawCanvasId: drawCanvasId,
-    } as PyodideWorkerOptions,
-    url: workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
-  } as KernelManagerMessage);
+    kernelManager.addEventListener("message", (e) => {
+      if (!e.data) return;
 
+      const data = e.data as KernelManagerResponse;
+      switch (data.type) {
+        case "result": {
+          if (data.kernelId !== kernelId) break;
+          const callback = runningCode.get(data.id);
+          if (!callback) {
+            console.warn("Missing Python callback");
+          } else {
+            convertResult(runtime, data.value as PyodideWorkerResult).then(callback);
+          }
+          objectProxyHost?.clearTemporary();
+          break;
+        }
+        case "console": {
+          if (data.kernelId !== kernelId) break;
+          (console as any)?.[data.method](...data.data);
+          break;
+        }
+        case "error": {
+          if (data.kernelId !== kernelId) break;
+          console.error(data.error);
+        }
+        case "custom": {
+          if (data.kernelId !== kernelId) break;
+          // No custom messages so far
+          break;
+        }
+        // Ignore
+        case "kernel-initialized":
+        case "proxy-reflect":
+        case "proxy-shared-memory":
+        case "proxy-print-object": {
+          break;
+        }
+        default: {
+          assertUnreachable(data);
+        }
+      }
+    });
+
+    kernelManager.postMessage({
+      type: "import-kernel",
+      className: "PyodideKernel",
+      kernelId: kernelId,
+      options: {
+        artifactsUrl: getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
+        globalThisId: globalThisId,
+        drawCanvasId: drawCanvasId,
+      } as PyodideWorkerOptions,
+      url: getPluginOpts().workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
+    } as KernelManagerMessage);
+  }
   await pyodideLoadSingleton;
   loadingStatus = "ready";
 
@@ -255,26 +259,28 @@ export function getPyodideLoadingStatus() {
 export async function runPythonAsync(code: string, data?: { [key: string]: any }) {
   if (!pyodideLoadSingleton) return;
 
-  const id = uuidv4();
+  if (getPluginOpts().runInMainThread) {
+  } else {
+    const kernelId = await pyodideLoadSingleton;
+    const id = uuidv4();
+    return new Promise((resolve, reject) => {
+      runningCode.set(id, (result) => {
+        resolve(result);
+        runningCode.delete(id);
+      });
 
-  const kernelId = await pyodideLoadSingleton;
-  return new Promise((resolve, reject) => {
-    runningCode.set(id, (result) => {
-      resolve(result);
-      runningCode.delete(id);
+      try {
+        kernelManager.postMessage({
+          type: "run",
+          kernelId: kernelId,
+          id: id,
+          code: code,
+        } as KernelManagerMessage);
+      } catch (e) {
+        console.warn(e, data);
+        reject(e);
+        runningCode.delete(id);
+      }
     });
-
-    try {
-      kernelManager.postMessage({
-        type: "run",
-        kernelId: kernelId,
-        id: id,
-        code: code,
-      } as KernelManagerMessage);
-    } catch (e) {
-      console.warn(e, data);
-      reject(e);
-      runningCode.delete(id);
-    }
-  });
+  }
 }

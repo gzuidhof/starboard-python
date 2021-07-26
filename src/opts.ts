@@ -1,6 +1,7 @@
 export type StarboardPythonPluginOpts = {
   artifactsUrl?: string;
   workerUrl?: string;
+  runInMainThread?: boolean;
 };
 
 // Global singleton
