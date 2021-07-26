@@ -5,7 +5,6 @@
 import "../pyodide/pyodide";
 import type { Pyodide as PyodideType } from "../pyodide/typings";
 import type { KernelManagerType, WorkerKernel } from "./kernel";
-import { assertUnreachable } from "../util";
 import { PyodideWorkerOptions, PyodideWorkerResult } from "./worker-message";
 
 declare global {
@@ -19,21 +18,24 @@ declare global {
 
 declare global {
   interface WorkerGlobalScope {
-    pyodide: PyodideType;
     loadPyodide(config: {
       indexURL: string;
       stdin?: () => any | null;
       print?: (text: string) => void;
       printErr?: (text: string) => void;
-    }): Promise<void>;
+    }): Promise<PyodideType>;
   }
 }
+
+const manager: KernelManagerType = self?.manager ?? (globalThis as any).manager;
+const loadPyodide: typeof self.loadPyodide = self?.loadPyodide ?? (globalThis as any).loadPyodide;
 
 class PyodideKernel implements WorkerKernel {
   kernelId: string;
   options: PyodideWorkerOptions;
   proxiedGlobalThis: undefined | any;
   proxiedDrawCanvas: (pixels: number[], width: number, height: number) => void = () => {};
+  pyodide: PyodideType | undefined = undefined;
 
   constructor(options: { id: string } & PyodideWorkerOptions) {
     this.kernelId = options.id;
@@ -42,9 +44,7 @@ class PyodideKernel implements WorkerKernel {
   async init(): Promise<any> {
     this.proxiedGlobalThis = this.proxyGlobalThis(this.options.globalThisId);
     this.proxiedDrawCanvas =
-      self.manager.proxy && this.options.drawCanvasId
-        ? self.manager.proxy.getObjectProxy(this.options.drawCanvasId)
-        : () => {};
+      manager.proxy && this.options.drawCanvasId ? manager.proxy.getObjectProxy(this.options.drawCanvasId) : () => {};
 
     (globalThis as any).drawPyodideCanvas = (pixels: number[], width: number, height: number) => {
       if ((pixels as any).toJs) {
@@ -62,34 +62,36 @@ class PyodideKernel implements WorkerKernel {
 
     /* self.importScripts(artifactsURL + "pyodide.js"); // Not used, we're importing our own pyodide.ts*/
 
-    if (!self.manager.proxy) {
+    if (!manager.proxy) {
       console.warn("Missing object proxy, some Pyodide functionality will be restricted");
     }
 
-    await self
-      .loadPyodide({
-        indexURL: artifactsURL,
-        stdin: this.createStdin(),
-        print: (text) => {
-          self.manager.log(this, text + "");
-        },
-        printErr: (text) => {
-          self.manager.logError(this, text + "");
-        },
-      })
-      .then(() => {
-        if (this.proxiedGlobalThis) {
-          // Fix "from js import ..."
-          /* self.pyodide.unregisterJsModule("js"); // Not needed, since register conveniently overwrites existing things */
-          self.pyodide.registerJsModule("js", this.proxiedGlobalThis); // TODO: Or should we register a new module? Like js_main
-        }
-      });
+    this.pyodide = await loadPyodide({
+      indexURL: artifactsURL,
+      stdin: this.createStdin(),
+      print: (text) => {
+        manager.log(this, text + "");
+      },
+      printErr: (text) => {
+        manager.logError(this, text + "");
+      },
+    });
+
+    if (this.proxiedGlobalThis) {
+      // Fix "from js import ..."
+      /* this.pyodide.unregisterJsModule("js"); // Not needed, since register conveniently overwrites existing things */
+      this.pyodide.registerJsModule("js", this.proxiedGlobalThis); // TODO: Or should we register a new module? Like js_main
+    }
   }
   async runCode(code: string): Promise<any> {
-    let result = await self.pyodide.runPythonAsync(code).catch((error) => error);
+    if (!this.pyodide) {
+      console.warn("Worker has not yet been initialized");
+      return;
+    }
+    let result = await this.pyodide.runPythonAsync(code).catch((error) => error);
     let displayType: PyodideWorkerResult["display"];
 
-    if (self.pyodide.isPyProxy(result)) {
+    if (this.pyodide.isPyProxy(result)) {
       if (result._repr_html_ !== undefined) {
         result = result._repr_html_();
         displayType = "html";
@@ -102,7 +104,7 @@ class PyodideKernel implements WorkerKernel {
         this.destroyToJsResult(result);
         temp?.destroy();
       }
-    } else if (result instanceof self.pyodide.PythonError) {
+    } else if (result instanceof this.pyodide.PythonError) {
       result = result + "";
     }
 
@@ -122,7 +124,7 @@ class PyodideKernel implements WorkerKernel {
     let inputIndex = -1; // -1 means that we just returned null
     function stdin() {
       if (inputIndex === -1) {
-        const text = self.manager.input();
+        const text = manager.input();
         input = encoder.encode(text + (text.endsWith("\n") ? "" : "\n"));
         inputIndex = 0;
       }
@@ -188,16 +190,17 @@ class PyodideKernel implements WorkerKernel {
       // Draw something to a canvas
       "drawPyodideCanvas",
     ]);
-    return self.manager.proxy && id
-      ? self.manager.proxy.wrapExcluderProxy(self.manager.proxy.getObjectProxy(id), globalThis, noProxy)
+    return manager.proxy && id
+      ? manager.proxy.wrapExcluderProxy(manager.proxy.getObjectProxy(id), globalThis, noProxy)
       : globalThis;
   }
 
   private destroyToJsResult(x: any) {
+    if (!this.pyodide) return;
     if (!x) {
       return;
     }
-    if (self.pyodide.isPyProxy(x)) {
+    if (this.pyodide.isPyProxy(x)) {
       x.destroy();
       return;
     }

@@ -246,5 +246,3 @@ export interface WorkerKernel {
 declare var WorkerKernel: {
   new (options: { id: string; [key: string]: any }): WorkerKernel;
 };
-
-// export as namespace manager;
