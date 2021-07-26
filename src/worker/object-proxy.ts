@@ -202,11 +202,19 @@ export class ObjectProxyHost {
   handleProxyMessage(message: ProxyMessage, memory: AsyncMemory) {
     if (message.type === "proxy-reflect") {
       try {
-        const method = Reflect[message.method];
-        const args = (message.arguments ?? []).map((v) => this.deserializePostMessage(v));
-        const result = (method as any)(this.getObject(message.target), ...args);
-        // Write result to shared memory
-        this.serializeMemory(result, memory);
+        if (message.method === "apply") {
+          const method = Reflect[message.method];
+          const args = (message.args ?? []).map((v) => this.deserializePostMessage(v));
+          const result = (method as any)(this.getObject(message.target), this.getObject(message.thisArg), args);
+          // Write result to shared memory
+          this.serializeMemory(result, memory);
+        } else {
+          const method = Reflect[message.method];
+          const args = (message.args ?? []).map((v) => this.deserializePostMessage(v));
+          const result = (method as any)(this.getObject(message.target), ...args);
+          // Write result to shared memory
+          this.serializeMemory(result, memory);
+        }
       } catch (e) {
         console.error(message);
         throw e;
@@ -218,6 +226,8 @@ export class ObjectProxyHost {
       } else {
         this.writeMemoryContinuation();
       }
+    } else if (message.type === "proxy-print-object") {
+      console.log("Object with id", message.target, "is", this.getObject(message.target));
     } else {
       console.warn("Unknown proxy message", message);
     }
@@ -329,18 +339,33 @@ export class ObjectProxyClient {
       this.memory.lockWorker();
       this.memory.lockSize();
       this.memory.writeSize(0);
-      this.postMessage({
-        type: "proxy-reflect",
-        method: method,
-        target: targetId,
-        arguments: args.map((v) => this.serializePostMessage(v)),
-      });
+      if (method === "apply") {
+        // Special case for "apply"
+        this.postMessage({
+          type: "proxy-reflect",
+          method: method,
+          target: targetId,
+          thisArg: args[0],
+          args: args[1].map((v: any[]) => this.serializePostMessage(v)),
+        });
+      } else {
+        this.postMessage({
+          type: "proxy-reflect",
+          method: method,
+          target: targetId,
+          args: args.map((v) => this.serializePostMessage(v)),
+        });
+      }
 
       this.memory.waitForSize();
       value = this.deserializeMemory(this.memory);
     } catch (e) {
       console.error({ method, targetId, args });
       console.error(e);
+      this.postMessage({
+        type: "proxy-print-object",
+        target: targetId,
+      });
     } finally {
       // Regardless of what happened, unlock the size and the worker
       this.memory.forceUnlockSize();
@@ -370,22 +395,25 @@ export class ObjectProxyClient {
         const value = client.proxyReflect("get", id, [prop, receiver]);
 
         if (typeof value !== "function") return value;
+        // TODO: Special handling for .bind, .apply and more
         /* Functions need special handling
          * https://stackoverflow.com/questions/27983023/proxy-on-dom-element-gives-error-when-returning-functions-that-implement-interfa
          * https://stackoverflow.com/questions/37092179/javascript-proxy-objects-dont-work
          */
         return new Proxy(value, {
-          apply(_, thisArg, args) {
+          apply(_, thisArg, argumentsList) {
             // thisArg: the object the function was called with. Can be the proxy or something else
             // receiver: the object the propery was gotten from. Is always the proxy or something inheriting from the proxy
             // target: the original object
 
-            // TODO: Or maybe thisArg[ObjectId] === receiver[ObjectId]?
             const calledWithProxy = thisArg === receiver;
 
             // return Reflect.apply(value, calledWithProxy ? target : thisArg, args);
-            const value = client.proxyReflect("apply", calledWithProxy ? id : thisArg[ObjectId], args ?? []);
-            return value;
+            const functionReturnValue = client.proxyReflect("apply", value[ObjectId], [
+              calledWithProxy ? id : thisArg[ObjectId],
+              argumentsList,
+            ]);
+            return functionReturnValue;
           },
         });
       },
@@ -436,8 +464,9 @@ export class ObjectProxyClient {
       apply(target, thisArg, argumentsList) {
         // Note: It can happen that a function gets called with a thisArg that cannot be serialized (due to it being an object on the worker thread)
         // One solution is to provide a `[ObjectId]: ""` property
+        // TODO: Can it also happen that a function gets called with an easily serializeable thisArg that doesn't have an ObjectId?
         // return Reflect.apply(target, thisArg, argumentsList);
-        return client.proxyReflect("apply", id, [thisArg, argumentsList]);
+        return client.proxyReflect("apply", id, [thisArg[ObjectId], argumentsList]);
       },
       construct(target, argumentsList, newTarget) {
         // return Reflect.construct(target, argumentsList, newTarget)
@@ -511,7 +540,7 @@ function isVariableLengthPrimitive(value: any) {
 export type ProxyMessage =
   | {
       type: "proxy-reflect";
-      method: keyof typeof Reflect;
+      method: Exclude<keyof typeof Reflect, "apply">;
       /**
        * An object id
        */
@@ -519,9 +548,29 @@ export type ProxyMessage =
       /**
        * Further parameters. Have to be serialized
        */
-      arguments?: any[];
+      args?: any[];
+    }
+  | {
+      type: "proxy-reflect";
+      method: "apply";
+      /**
+       * An object id
+       */
+      target: string;
+      /**
+       * An object id
+       */
+      thisArg: string;
+      /**
+       * Further parameters. Have to be serialized
+       */
+      args?: any[];
     }
   | {
       /** For requesting more bytes from the shared memory*/
       type: "proxy-shared-memory";
+    }
+  | {
+      type: "proxy-print-object";
+      target: string;
     };

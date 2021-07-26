@@ -24,6 +24,27 @@ export function setGlobalPythonOutputElement(el: HTMLElement | undefined) {
   CURRENT_HTML_OUTPUT_ELEMENT = el;
 }
 
+function drawCanvas(pixels: number[], width: number, height: number) {
+  const elem = document.createElement("div");
+  if (!CURRENT_HTML_OUTPUT_ELEMENT) {
+    console.log("HTML output from pyodide but nowhere to put it, will append to body instead.");
+    document.querySelector("body")!.appendChild(elem);
+  } else {
+    CURRENT_HTML_OUTPUT_ELEMENT.appendChild(elem);
+  }
+  const image = new ImageData(new Uint8ClampedArray(pixels), width, height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    console.warn("Failed to aquire canvas context");
+    return;
+  }
+  ctx.putImageData(image, 0, 0);
+  CURRENT_HTML_OUTPUT_ELEMENT?.appendChild(canvas);
+}
+
 /**
  * Initial setup for Python support, this includes only the synchronous parts (such as adding a stylesheet used for the output).
  * @returns
@@ -115,7 +136,7 @@ function loadKernelManager() {
     }
     const data = ev.data as KernelManagerResponse;
 
-    if (data.type === "proxy-reflect" || data.type === "proxy-shared-memory") {
+    if (data.type === "proxy-reflect" || data.type === "proxy-shared-memory" || data.type === "proxy-print-object") {
       if (asyncMemory && objectProxyHost) {
         objectProxyHost.handleProxyMessage(data, asyncMemory);
       }
@@ -146,6 +167,7 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
   kernelManager = result.kernelManager;
   objectProxyHost = result.objectProxyHost;
   const globalThisId = objectProxyHost?.registerRootObject(globalThis);
+  const drawCanvasId = objectProxyHost?.registerRootObject(drawCanvas);
   // Pyodide worker loading
   loadingStatus = "loading";
 
@@ -198,7 +220,8 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
       // Ignore
       case "kernel-initialized":
       case "proxy-reflect":
-      case "proxy-shared-memory": {
+      case "proxy-shared-memory":
+      case "proxy-print-object": {
         break;
       }
       default: {
@@ -214,6 +237,7 @@ export async function loadPyodide(runtime: Runtime, artifactsUrl?: string, worke
     options: {
       artifactsUrl: artifactsUrl || getPluginOpts().artifactsUrl || (window as any).pyodideArtifactsUrl,
       globalThisId: globalThisId,
+      drawCanvasId: drawCanvasId,
     } as PyodideWorkerOptions,
     url: workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
   } as KernelManagerMessage);

@@ -33,6 +33,7 @@ class PyodideKernel implements WorkerKernel {
   kernelId: string;
   options: PyodideWorkerOptions;
   proxiedGlobalThis: undefined | any;
+  proxiedDrawCanvas: (pixels: number[], width: number, height: number) => void = () => {};
 
   constructor(options: { id: string } & PyodideWorkerOptions) {
     this.kernelId = options.id;
@@ -40,6 +41,21 @@ class PyodideKernel implements WorkerKernel {
   }
   async init(): Promise<any> {
     this.proxiedGlobalThis = this.proxyGlobalThis(this.options.globalThisId);
+    this.proxiedDrawCanvas =
+      self.manager.proxy && this.options.drawCanvasId
+        ? self.manager.proxy.getObjectProxy(this.options.drawCanvasId)
+        : () => {};
+
+    (globalThis as any).drawPyodideCanvas = (pixels: number[], width: number, height: number) => {
+      if ((pixels as any).toJs) {
+        pixels = (pixels as any).toJs();
+      }
+      if (pixels instanceof Uint8ClampedArray || pixels instanceof Uint8Array) {
+        pixels = Array.from(pixels);
+      }
+      // TODO: Handle the case when this.function gets called (this ends up being passed to the main thread, which won't work)
+      this.proxiedDrawCanvas.apply({}, [pixels, width, height]);
+    };
 
     let artifactsURL = this.options.artifactsUrl || "https://cdn.jsdelivr.net/pyodide/v0.17.0/full/";
     if (!artifactsURL.endsWith("/")) artifactsURL += "/";
@@ -49,22 +65,6 @@ class PyodideKernel implements WorkerKernel {
     if (!self.manager.proxy) {
       console.warn("Missing object proxy, some Pyodide functionality will be restricted");
     }
-
-    (self.pyodide as any).matplotlibHelpers = {
-      createElement: (tagName: string) => {
-        // TODO:
-        console.warn("Unsupported, plez implement");
-        /*
-          const elem = document.createElement(tagName);
-          if (!CURRENT_HTML_OUTPUT_ELEMENT) {
-            console.log("HTML output from pyodide but nowhere to put it, will append to body instead.");
-            document.querySelector("body")!.appendChild(elem);
-          } else {
-            CURRENT_HTML_OUTPUT_ELEMENT.appendChild(elem);
-          }
-          return elem;*/
-      },
-    };
 
     await self
       .loadPyodide({
@@ -184,6 +184,9 @@ class PyodideKernel implements WorkerKernel {
       "includes",
       "next",
       Symbol.iterator,
+
+      // Draw something to a canvas
+      "drawPyodideCanvas",
     ]);
     return self.manager.proxy && id
       ? self.manager.proxy.wrapExcluderProxy(self.manager.proxy.getObjectProxy(id), globalThis, noProxy)

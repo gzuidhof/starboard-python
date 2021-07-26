@@ -1,6 +1,7 @@
 export type PyodideWorkerOptions = {
   artifactsUrl?: string;
   globalThisId?: string;
+  drawCanvasId?: string;
 };
 
 export type PyodideWorkerResult = {
