@@ -93,7 +93,7 @@ function getAsyncMemory() {
   }
 }
 
-async function convertResult(runtime: Runtime, data: PyodideWorkerResult) {
+async function convertResult(data: PyodideWorkerResult, runtime: Runtime) {
   if (data.display === "default") {
     return data.value;
   } else if (data.display === "html") {
@@ -101,12 +101,13 @@ async function convertResult(runtime: Runtime, data: PyodideWorkerResult) {
     div.className = "rendered_html cell-output-html";
     div.appendChild(new DOMParser().parseFromString(data.value, "text/html").body.firstChild as any);
     return div;
-  } else if (data.display === "latex") {
+  } else if (data.display === "latex" && runtime) {
     let div = document.createElement("div");
     div.className = "rendered_html cell-output-html";
+    const value = data.value;
     const katex = await runtime.exports.libraries.async.KaTeX();
 
-    katex.render(data.value.replace(/^(\$?\$?)([^]*)\1$/, "$2"), div, {
+    katex.render(value.replace(/^(\$?\$?)([^]*)\1$/, "$2"), div, {
       throwOnError: false,
       errorColor: " #cc0000",
       displayMode: true,
@@ -162,7 +163,7 @@ function loadKernelManager() {
   };
 }
 
-export async function loadPyodide(runtime: Runtime) {
+export async function loadPyodide() {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
   const kernelManagerResult = loadKernelManager();
@@ -191,7 +192,7 @@ export async function loadPyodide(runtime: Runtime) {
 
   if (getPluginOpts().runInMainThread) {
     pyodideLoadSingleton = Promise.resolve("");
-    mainThreadPyodideRunner = await mainThreadPyodide(initOptions);
+    mainThreadPyodideRunner = await mainThreadPyodide(initOptions, drawCanvas);
   } else {
     pyodideLoadSingleton = new Promise((resolve, reject) => {
       // Only the resolve case is handled for now
@@ -218,7 +219,7 @@ export async function loadPyodide(runtime: Runtime) {
           if (!callback) {
             console.warn("Missing Python callback");
           } else {
-            convertResult(runtime, data.value as PyodideWorkerResult).then(callback);
+            callback(data.value as PyodideWorkerResult);
           }
           objectProxyHost?.clearTemporary();
           break;
@@ -262,12 +263,13 @@ export function getPyodideLoadingStatus() {
   return loadingStatus;
 }
 
-export async function runPythonAsync(code: string) {
+export async function runPythonAsync(code: string, runtime: Runtime) {
   if (!pyodideLoadSingleton) return;
 
   if (getPluginOpts().runInMainThread) {
     if (mainThreadPyodideRunner) {
-      return mainThreadPyodideRunner(code);
+      const result = await mainThreadPyodideRunner(code);
+      return await convertResult(result, runtime);
     } else {
       console.error("Missing main thread pyodide");
       return null;
@@ -277,7 +279,7 @@ export async function runPythonAsync(code: string) {
     const id = uuidv4();
     return new Promise((resolve, reject) => {
       runningCode.set(id, (result) => {
-        resolve(result);
+        convertResult(result, runtime).then((v) => resolve(v));
         runningCode.delete(id);
       });
 

@@ -2,26 +2,26 @@ import type { KernelManagerMessage, KernelManagerType, WorkerKernel } from "./wo
 import type { PyodideWorkerOptions } from "./worker/worker-message";
 import { ObjectId } from "./worker/object-proxy";
 
-export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "import-kernel" }) {
+export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "import-kernel" }, drawCanvas: any) {
   let pyodideWorkerOptions = opts.options as PyodideWorkerOptions;
   pyodideWorkerOptions.globalThisId = "";
-  pyodideWorkerOptions.drawCanvasId = ""; // TODO:
+  pyodideWorkerOptions.drawCanvasId = "";
 
   const fakeKernel: KernelManagerType = {
     proxy: undefined,
     postMessage(message) {},
     input: () => {
-      return "";
+      return prompt() || "";
     },
     kernels: new Map(),
     log(kernel, ...args) {
-      console.log(args);
+      console.log(...args);
     },
     logWarning(kernel, ...args) {
-      console.warn(args);
+      console.warn(...args);
     },
     logError(kernel, ...args) {
-      console.error(args);
+      console.error(...args);
     },
     [ObjectId]: "",
   };
@@ -35,7 +35,8 @@ export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "im
         if (!opts.options.id) {
           opts.options.id = opts.kernelId;
         }
-        new KernelClass(pyodideWorkerOptions).init().then(() => {
+        const kernel = new KernelClass(pyodideWorkerOptions);
+        kernel.init().then(() => {
           resolve(kernel);
         });
       };
@@ -45,6 +46,9 @@ export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "im
       reject(e);
     }
   });
+
+  // Not quite as elegant as it could be, but whatevs
+  (kernel as any).proxiedDrawCanvas = drawCanvas;
 
   async function run(code: string) {
     const result = await kernel.runCode(code);
