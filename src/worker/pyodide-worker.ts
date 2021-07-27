@@ -145,7 +145,8 @@ class PyodideKernel implements WorkerKernel {
     // Special cases for the globalThis object. We don't need to proxy everything
     const noProxy = new Set<string | symbol>([
       "location",
-      "navigator",
+      // Proxy navigator, however, some navigator properties do not have to be proxied
+      // "navigator",
       "self",
       "importScripts",
       "addEventListener",
