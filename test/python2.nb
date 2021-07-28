@@ -8,7 +8,7 @@ print(setTimeout)
 print("Hello world")
 print("xkcd💩")
 # %% [python]
-x = int(input())
+x = int(3) # input()
 
 def bottle_or_bottles(num_bottles):
     if num_bottles != 1:
