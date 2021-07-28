@@ -3,7 +3,7 @@ import type { PyodideWorkerOptions } from "./worker/worker-message";
 import { ObjectId } from "./worker/object-proxy";
 
 export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "import-kernel" }, drawCanvas: any) {
-  let pyodideWorkerOptions = opts.options as PyodideWorkerOptions;
+  const pyodideWorkerOptions = opts.options as PyodideWorkerOptions;
   pyodideWorkerOptions.globalThisId = "";
   pyodideWorkerOptions.drawCanvasId = "";
 

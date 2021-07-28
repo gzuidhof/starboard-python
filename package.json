@@ -8,7 +8,6 @@
   "scripts": {
     "build": "rimraf dist && rollup -c rollup.config.ts",
     "test": "starlit nbtest test --timeout=60",
-    "test:edge": "starlit nbtest test --browser_exec_path \"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe\" --timeout=60",
     "prepublishOnly": "npm i && npm run build"
   },
   "repository": {
