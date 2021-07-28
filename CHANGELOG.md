@@ -1,4 +1,4 @@
-## [unreleased]
+## 0.7.0
 * Run Pyodide in a web worker by default
 * To run it in the main thread, set the `runInMainThread` option to true
 
