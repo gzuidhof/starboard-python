@@ -1,14 +1,18 @@
-import { Runtime } from "starboard-notebook/dist/src/types";
+import type { Runtime } from "starboard-notebook/dist/src/types";
 import { flatPromise } from "./flatPromise";
 import {
   loadPyodide,
+  runPythonAsync,
   setGlobalPythonOutputElement as setGlobalPythonHtmlOutputElement,
   setupPythonSupport,
 } from "./global";
-import { isPyProxy } from "./util";
 
 // This is used as a mutex to prevent double execution.
 let pythonRunChain: Promise<any> = Promise.resolve();
+
+const isPyProxy = function (jsobj: any) {
+  return !!jsobj && jsobj.$$ !== undefined && jsobj.$$.type === "PyProxy";
+};
 
 export async function runStarboardPython(
   runtime: Runtime,
@@ -40,7 +44,7 @@ export async function runStarboardPython(
   let val = undefined;
   let error: any = undefined;
   try {
-    pythonRunChain = window.pyodide.runPythonAsync(codeToRun);
+    pythonRunChain = runPythonAsync(codeToRun, runtime);
     val = await pythonRunChain;
     window.$_ = val;
 

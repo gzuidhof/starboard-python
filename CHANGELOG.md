@@ -1,3 +1,7 @@
+## [unreleased]
+* Run Pyodide in a web worker by default
+* To run it in the main thread, set the `runInMainThread` option to true
+
 ## 0.6.7
 * Make changes required for Starboard notebook 0.12.0 (moving away from emit to `runtime.controls` directly).
 

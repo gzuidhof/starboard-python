@@ -1,4 +1,4 @@
-import {
+import type {
   CellTypeDefinition,
   CellHandlerAttachParameters,
   CellElements,
@@ -6,13 +6,10 @@ import {
   StarboardPlugin,
 } from "starboard-notebook/dist/src/types";
 import * as litImport from "lit";
-import { Runtime, ControlButton } from "starboard-notebook/dist/src/types";
-
-import { Pyodide as PyodideType } from "./typings";
+import type { Runtime, ControlButton } from "starboard-notebook/dist/src/types";
 
 import { getPyodideLoadingStatus, loadPyodide, setupPythonSupport, setGlobalPythonOutputElement } from "./global.js";
 import { runStarboardPython } from "./run.js";
-import { isPyProxy } from "./util";
 import { setPluginOpts, StarboardPythonPluginOpts } from "./opts";
 
 export { getPyodideLoadingStatus, setupPythonSupport, loadPyodide, setGlobalPythonOutputElement };
@@ -20,7 +17,6 @@ export { runStarboardPython } from "./run.js";
 
 declare global {
   interface Window {
-    pyodide: PyodideType;
     runtime: Runtime;
     $_: any;
   }
@@ -63,7 +59,6 @@ export function registerPython(runtime: Runtime) {
       const runButton: ControlButton = {
         icon,
         tooltip,
-        //@ts-ignore
         callback: () => this.runtime.controls.runCell({ id: this.cell.id }),
       };
       let buttons = [runButton];
@@ -153,7 +148,6 @@ export const plugin: StarboardPlugin = {
   exports: {
     getPyodideLoadingStatus: getPyodideLoadingStatus,
     runStarboardPython: runStarboardPython,
-    isPyProxy: isPyProxy,
     setGlobalPythonOutputElement: setGlobalPythonOutputElement,
     loadPyodide: loadPyodide,
   },
