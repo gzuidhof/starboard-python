@@ -29,15 +29,14 @@
   "homepage": "https://github.com/gzuidhof/starboard-python#readme",
   "dependencies": {
     "@types/katex": "^0.11.1",
-    "lit": "*",
-    "uuid": "^8.3.2"
+    "lit": "*"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^19.0.2",
     "@rollup/plugin-node-resolve": "^13.0.4",
     "@types/markdown-it": "^12.0.3",
-    "@types/uuid": "^8.3.1",
     "clean-css": "^5.1.3",
+    "nanoid": "^3.1.23",
     "rimraf": "^3.0.2",
     "rollup": "^2.55.0",
     "rollup-plugin-dts": "^3.0.2",

@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 import { AsyncMemory } from "./async-memory";
 
 const SERIALIZATION = {
@@ -77,7 +77,7 @@ export class ObjectProxyHost {
 
   /** Creates a valid, random id for a given object */
   private getId(value: any) {
-    return uuidv4() + "-" + (typeof value === "function" ? "f" : "o");
+    return nanoid() + "-" + (typeof value === "function" ? "f" : "o");
   }
 
   registerRootObject(value: any) {

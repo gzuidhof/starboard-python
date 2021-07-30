@@ -7,16 +7,21 @@ import { terser } from "rollup-plugin-terser";
 
 const CleanCSS = require("clean-css");
 
+// We need to be quite careful with these, when minifying and mangling everything there are clashes
+// with `const e=` being in the same scope multiple times. Perhaps it's due to `importScripts` and its scoping?
 const terserOptions = {
   ecma: 2020,
   keep_fnames: true,
   keep_classnames: true,
   ie8: false,
-  safari10: true /* :( */,
-  // format: {
-  //   indent_level: 2,
-  //   beautify: true,
-  // },
+  safari10: true,
+  compress: {
+    defaults: false,
+    booleans: true,
+  },
+  mangle: false,
+  module: false,
+  parser: {},
 };
 
 // Inline plugin to load css as minified string
@@ -36,8 +41,9 @@ export default [
   {
     input: `src/worker/kernel.ts`,
     output: [{ file: "dist/kernel.js", format: "es" }],
+
     plugins: [
-      resolve(),
+      resolve({ browser: true }),
       typescript({
         tsconfig: "./src/worker/tsconfig.json",
         include: ["./src/**/*.ts"],
@@ -50,7 +56,7 @@ export default [
     input: `src/worker/pyodide-worker.ts`,
     output: [{ file: "dist/pyodide-worker.js", format: "es" }],
     plugins: [
-      resolve(),
+      resolve({ browser: true }),
       typescript({
         tsconfig: "./src/worker/tsconfig.json",
         include: ["./src/**/*.ts"],
@@ -63,7 +69,7 @@ export default [
     input: `src/index.ts`,
     output: [{ file: "dist/index.js", format: "es" }],
     plugins: [
-      resolve(),
+      resolve({ browser: true }),
       typescript({
         include: ["./src/**/*.ts"],
       }),

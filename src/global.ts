@@ -1,7 +1,7 @@
 // @ts-ignore
 import css from "./pyodide/pyodide-styles.css";
 import { getPluginOpts } from "./opts";
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 import { assertUnreachable } from "./util";
 import type { KernelManagerMessage, KernelManagerResponse, KernelSource } from "./worker/kernel";
 import type { PyodideWorkerOptions, PyodideWorkerResult } from "./worker/worker-message";
@@ -186,7 +186,7 @@ export async function loadPyodide() {
   loadingStatus = "loading";
 
   /** Pyodide Kernel id */
-  const kernelId = uuidv4();
+  const kernelId = nanoid();
 
   let kernelSource: KernelSource | undefined = getPluginOpts().workerSource;
   if (kernelSource === undefined) {
@@ -294,7 +294,7 @@ export async function runPythonAsync(code: string, runtime: Runtime) {
     }
   } else {
     const kernelId = await pyodideLoadSingleton;
-    const id = uuidv4();
+    const id = nanoid();
     return new Promise((resolve, reject) => {
       runningCode.set(id, (result) => {
         convertResult(result, runtime).then((v) => resolve(v));
