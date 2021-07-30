@@ -45,7 +45,7 @@
     "rollup-plugin-typescript2": "^0.30.0",
     "rollup-plugin-web-worker-loader": "^1.6.1",
     "starboard-notebook": "^0.12.3",
-    "starlit": "^0.1.16",
+    "starlit": "^0.1.17",
     "typescript": "^4.3.5"
   }
 }
