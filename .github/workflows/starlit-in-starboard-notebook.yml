@@ -24,11 +24,12 @@ jobs:
         npm run build
         npm link
   
-    - name: Test with Starboard Notebook
+    - name: Install and build starboard-notebook
       run: |
         git clone https://github.com/gzuidhof/starboard-notebook.git
         cd starboard-notebook
         npm i
         npm link starboard-python
         npm run build:nominify
-        npm run nbtest
+    - name: Starlit
+      run: starlit nbtest ./test --starboard_artifacts ./starboard-notebook/dist --timeout 60
