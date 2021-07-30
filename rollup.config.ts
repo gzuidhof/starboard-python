@@ -21,7 +21,6 @@ const terserOptions = {
   },
   mangle: false,
   module: false,
-  parser: {},
 };
 
 // Inline plugin to load css as minified string
