@@ -1,6 +1,7 @@
 ## 0.7.1
 * The Pyodide webworker code is now embedded in the source file which prevents issues with COOP/COEP/CORS policies.
 * Changed from kebab-case to snake_case for kernel messaging.
+* Added CI script (which works by building starboard-notebook with starboard-python `npm link`ed).
 
 ## 0.7.0
 * Run Pyodide in a web worker by default
