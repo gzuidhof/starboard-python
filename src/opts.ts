@@ -1,6 +1,8 @@
+import { KernelSource } from "./worker/kernel";
+
 export type StarboardPythonPluginOpts = {
   artifactsUrl?: string;
-  workerUrl?: string;
+  workerSource?: KernelSource;
   runInMainThread?: boolean;
 };
 

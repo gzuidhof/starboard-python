@@ -1,6 +1,6 @@
 {
   "name": "starboard-python",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Python cells for Starboard Notebook",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -41,9 +41,12 @@
     "rimraf": "^3.0.2",
     "rollup": "^2.55.0",
     "rollup-plugin-dts": "^3.0.2",
+    "rollup-plugin-string": "^3.0.0",
+    "rollup-plugin-terser": "^7.0.2",
     "rollup-plugin-typescript2": "^0.30.0",
+    "rollup-plugin-web-worker-loader": "^1.6.1",
     "starboard-notebook": "^0.12.3",
-    "starlit": "^0.1.15",
+    "starlit": "^0.1.16",
     "typescript": "^4.3.5"
   }
 }

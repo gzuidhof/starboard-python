@@ -2,8 +2,22 @@ import resolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 import typescript from "rollup-plugin-typescript2";
 import dts from "rollup-plugin-dts";
+import { string } from "rollup-plugin-string";
+import { terser } from "rollup-plugin-terser";
 
 const CleanCSS = require("clean-css");
+
+const terserOptions = {
+  ecma: 2020,
+  keep_fnames: true,
+  keep_classnames: true,
+  ie8: false,
+  safari10: true /* :( */,
+  // format: {
+  //   indent_level: 2,
+  //   beautify: true,
+  // },
+};
 
 // Inline plugin to load css as minified string
 const css = () => {
@@ -29,6 +43,7 @@ export default [
         include: ["./src/**/*.ts"],
       }),
       commonjs(),
+      terser(terserOptions),
     ],
   },
   {
@@ -41,6 +56,7 @@ export default [
         include: ["./src/**/*.ts"],
       }),
       commonjs(),
+      terser(terserOptions),
     ],
   },
   {
@@ -50,6 +66,9 @@ export default [
       resolve(),
       typescript({
         include: ["./src/**/*.ts"],
+      }),
+      string({
+        include: ["dist/kernel.js", "dist/pyodide-worker.js"],
       }),
       commonjs(),
       css(),

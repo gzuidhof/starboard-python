@@ -3,12 +3,17 @@ import css from "./pyodide/pyodide-styles.css";
 import { getPluginOpts } from "./opts";
 import { v4 as uuidv4 } from "uuid";
 import { assertUnreachable } from "./util";
-import type { KernelManagerMessage, KernelManagerResponse } from "./worker/kernel";
+import type { KernelManagerMessage, KernelManagerResponse, KernelSource } from "./worker/kernel";
 import type { PyodideWorkerOptions, PyodideWorkerResult } from "./worker/worker-message";
 import { AsyncMemory } from "./worker/async-memory";
 import type { Runtime } from "starboard-notebook/dist/src/types";
 import { ObjectProxyHost } from "./worker/object-proxy";
 import { mainThreadPyodide } from "./main-thread-pyodide";
+
+//@ts-ignore
+import kernelWorkerScriptSource from "../dist/kernel.js";
+//@ts-ignore
+import pyodideWorkerScriptSource from "../dist/pyodide-worker.js";
 
 let setupStatus: "unstarted" | "started" | "completed" = "unstarted";
 let loadingStatus: "unstarted" | "loading" | "ready" = "unstarted";
@@ -121,9 +126,14 @@ async function convertResult(data: PyodideWorkerResult, runtime: Runtime) {
 
 function loadKernelManager() {
   // TODO: This part should be moved to starboard
-  const kernelUrl: string | undefined = undefined;
+  let kernelUrl: string | undefined = undefined;
 
-  const worker = kernelUrl ? new Worker(kernelUrl) : new Worker(new URL("kernel.js", import.meta.url));
+  if (kernelUrl === undefined) {
+    const blob = new Blob([kernelWorkerScriptSource], { type: "text/javascript" });
+    kernelUrl = URL.createObjectURL(blob);
+  }
+
+  const worker = new Worker(kernelUrl);
 
   // Since all kernels are running in the same worker, they might as well use the same async memory and object proxy
   const asyncMemory = getAsyncMemory();
@@ -132,14 +142,14 @@ function loadKernelManager() {
     return prompt();
   });
 
-  worker.addEventListener("message", (ev) => {
+  worker.addEventListener("message", (ev: MessageEvent) => {
     if (!ev.data) {
       console.warn("Unexpected message from kernel manager", ev);
       return;
     }
     const data = ev.data as KernelManagerResponse;
 
-    if (data.type === "proxy-reflect" || data.type === "proxy-shared-memory" || data.type === "proxy-print-object") {
+    if (data.type === "proxy_reflect" || data.type === "proxy_shared_memory" || data.type === "proxy_print_object") {
       if (asyncMemory && objectProxyHost) {
         objectProxyHost.handleProxyMessage(data, asyncMemory);
       }
@@ -178,8 +188,16 @@ export async function loadPyodide() {
   /** Pyodide Kernel id */
   const kernelId = uuidv4();
 
+  let kernelSource: KernelSource | undefined = getPluginOpts().workerSource;
+  if (kernelSource === undefined) {
+    kernelSource = {
+      type: "code",
+      code: pyodideWorkerScriptSource,
+    };
+  }
+
   const initOptions: KernelManagerMessage = {
-    type: "import-kernel",
+    type: "import_kernel",
     className: "PyodideKernel",
     kernelId: kernelId,
     options: {
@@ -187,7 +205,7 @@ export async function loadPyodide() {
       globalThisId: globalThisId,
       drawCanvasId: drawCanvasId,
     } as PyodideWorkerOptions,
-    url: getPluginOpts().workerUrl ?? new URL("pyodide-worker.js", import.meta.url) + "",
+    source: kernelSource,
   };
 
   if (getPluginOpts().runInMainThread) {
@@ -199,7 +217,7 @@ export async function loadPyodide() {
       function handleInitMessage(ev: MessageEvent<any>) {
         if (!ev.data) return;
         const data = ev.data as KernelManagerResponse;
-        if (data.type === "kernel-initialized" && data.kernelId === kernelId) {
+        if (data.type === "kernel_initialized" && data.kernelId === kernelId) {
           kernelManager.removeEventListener("message", handleInitMessage);
 
           resolve(kernelId);
@@ -239,10 +257,10 @@ export async function loadPyodide() {
           break;
         }
         // Ignore
-        case "kernel-initialized":
-        case "proxy-reflect":
-        case "proxy-shared-memory":
-        case "proxy-print-object": {
+        case "kernel_initialized":
+        case "proxy_reflect":
+        case "proxy_shared_memory":
+        case "proxy_print_object": {
           break;
         }
         default: {
