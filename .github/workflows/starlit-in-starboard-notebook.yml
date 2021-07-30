@@ -30,4 +30,5 @@ jobs:
         cd starboard-notebook
         npm i
         npm link starboard-python
+        npm run build:nominify
         npm run nbtest
