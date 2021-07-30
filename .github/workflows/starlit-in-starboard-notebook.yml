@@ -33,4 +33,4 @@ jobs:
         npm run build:nominify
 
     - name: Starlit nbtest
-      run: npm run test -- --starboard_artifacts ./starboard-notebook/dist
+      run: npm run test -- --starboard_artifacts ./starboard-notebook/dist --timeout 120
