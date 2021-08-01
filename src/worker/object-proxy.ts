@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 import { AsyncMemory } from "./async-memory";
 
 const SERIALIZATION = {
@@ -77,7 +77,7 @@ export class ObjectProxyHost {
 
   /** Creates a valid, random id for a given object */
   private getId(value: any) {
-    return uuidv4() + "-" + (typeof value === "function" ? "f" : "o");
+    return nanoid() + "-" + (typeof value === "function" ? "f" : "o");
   }
 
   registerRootObject(value: any) {
@@ -200,7 +200,7 @@ export class ObjectProxyHost {
   }
 
   handleProxyMessage(message: ProxyMessage, memory: AsyncMemory) {
-    if (message.type === "proxy-reflect") {
+    if (message.type === "proxy_reflect") {
       try {
         if (message.method === "apply") {
           const method = Reflect[message.method];
@@ -219,14 +219,14 @@ export class ObjectProxyHost {
         console.error(message);
         throw e;
       }
-    } else if (message.type === "proxy-shared-memory") {
+    } else if (message.type === "proxy_shared_memory") {
       // Write remaining data to shared memory
       if (this.writeMemoryContinuation === undefined) {
         console.warn("No more data to write to shared memory");
       } else {
         this.writeMemoryContinuation();
       }
-    } else if (message.type === "proxy-print-object") {
+    } else if (message.type === "proxy_print_object") {
       console.log("Object with id", message.target, "is", this.getObject(message.target));
     } else {
       console.warn("Unknown proxy message", message);
@@ -285,7 +285,7 @@ export class ObjectProxyClient {
         offset += memorySize;
         remainingBytes -= memorySize;
         memory.lockSize();
-        this.postMessage({ type: "proxy-shared-memory" });
+        this.postMessage({ type: "proxy_shared_memory" });
         memory.waitForSize();
       }
       if (remainingBytes > 0) {
@@ -342,7 +342,7 @@ export class ObjectProxyClient {
       if (method === "apply") {
         // Special case for "apply"
         this.postMessage({
-          type: "proxy-reflect",
+          type: "proxy_reflect",
           method: method,
           target: targetId,
           thisArg: args[0],
@@ -350,7 +350,7 @@ export class ObjectProxyClient {
         });
       } else {
         this.postMessage({
-          type: "proxy-reflect",
+          type: "proxy_reflect",
           method: method,
           target: targetId,
           args: args.map((v) => this.serializePostMessage(v)),
@@ -363,7 +363,7 @@ export class ObjectProxyClient {
       console.error({ method, targetId, args });
       console.error(e);
       this.postMessage({
-        type: "proxy-print-object",
+        type: "proxy_print_object",
         target: targetId,
       });
     } finally {
@@ -539,7 +539,7 @@ function isVariableLengthPrimitive(value: any) {
 
 export type ProxyMessage =
   | {
-      type: "proxy-reflect";
+      type: "proxy_reflect";
       method: Exclude<keyof typeof Reflect, "apply">;
       /**
        * An object id
@@ -551,7 +551,7 @@ export type ProxyMessage =
       args?: any[];
     }
   | {
-      type: "proxy-reflect";
+      type: "proxy_reflect";
       method: "apply";
       /**
        * An object id
@@ -568,9 +568,9 @@ export type ProxyMessage =
     }
   | {
       /** For requesting more bytes from the shared memory*/
-      type: "proxy-shared-memory";
+      type: "proxy_shared_memory";
     }
   | {
-      type: "proxy-print-object";
+      type: "proxy_print_object";
       target: string;
     };

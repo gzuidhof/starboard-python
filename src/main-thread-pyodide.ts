@@ -2,7 +2,7 @@ import type { KernelManagerMessage, KernelManagerType, WorkerKernel } from "./wo
 import type { PyodideWorkerOptions } from "./worker/worker-message";
 import { ObjectId } from "./worker/object-proxy";
 
-export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "import-kernel" }, drawCanvas: any) {
+export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "import_kernel" }, drawCanvas: any) {
   const pyodideWorkerOptions = opts.options as PyodideWorkerOptions;
   pyodideWorkerOptions.globalThisId = "";
   pyodideWorkerOptions.drawCanvasId = "";
@@ -40,7 +40,11 @@ export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "im
           resolve(kernel);
         });
       };
-      script.src = opts.url;
+      if (opts.source.type === "url") {
+        script.src = opts.source.url;
+      } else {
+        script.text = opts.source.code;
+      }
       document.head.appendChild(script);
     } catch (e) {
       reject(e);

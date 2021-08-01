@@ -44,9 +44,14 @@ class KernelManager {
 
           break;
         }
-        case "import-kernel": {
+        case "import_kernel": {
           try {
-            importScripts(data.url);
+            if (data.source.type === "url") {
+              importScripts(data.source.url);
+            } else {
+              const blob = new Blob([data.source.code], { type: "text/javascript" });
+              importScripts(URL.createObjectURL(blob));
+            }
             const KernelClass = (globalThis as any)[data.className];
             if (!data.options.id) {
               data.options.id = data.kernelId;
@@ -55,7 +60,7 @@ class KernelManager {
             this.kernels.set(kernel.kernelId, kernel);
             kernel.init().then(() => {
               this.postMessage({
-                type: "kernel-initialized",
+                type: "kernel_initialized",
                 kernelId: kernel.kernelId,
               });
             });
@@ -158,6 +163,16 @@ declare global {
 // @ts-ignore
 globalThis.manager = new KernelManager();
 
+export type KernelSource =
+  | {
+      type: "code";
+      code: string;
+    }
+  | {
+      type: "url";
+      url: string;
+    };
+
 /**
  * Every message has an id to identify the communication and a type
  */
@@ -172,9 +187,9 @@ export type KernelManagerMessage =
       getInputId?: string;
     }
   | {
-      type: "import-kernel";
+      type: "import_kernel";
       kernelId: string;
-      url: string;
+      source: KernelSource;
       className: string;
       options: any;
     }
@@ -195,7 +210,7 @@ export type KernelManagerMessage =
  */
 export type KernelManagerResponse =
   | {
-      type: "kernel-initialized";
+      type: "kernel_initialized";
       kernelId: string;
     }
   | {
