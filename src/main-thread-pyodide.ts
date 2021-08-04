@@ -30,7 +30,7 @@ export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "im
   const kernel = await new Promise<WorkerKernel>((resolve, reject) => {
     try {
       const script = document.createElement("script");
-      script.onload = function () {
+      const onLoad = () => {
         const KernelClass = (globalThis as any)[opts.className];
         if (!opts.options.id) {
           opts.options.id = opts.kernelId;
@@ -40,12 +40,16 @@ export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "im
           resolve(kernel);
         });
       };
+
       if (opts.source.type === "url") {
+        script.addEventListener("load", onLoad);
         script.src = opts.source.url;
+        document.head.appendChild(script);
       } else {
         script.text = opts.source.code;
+        document.head.appendChild(script);
+        onLoad();
       }
-      document.head.appendChild(script);
     } catch (e) {
       reject(e);
     }
