@@ -10,7 +10,7 @@ import type { Runtime, ControlButton } from "starboard-notebook/dist/src/types";
 
 import { getPyodideLoadingStatus, loadPyodide, setupPythonSupport, setGlobalPythonOutputElement } from "./global.js";
 import { runStarboardPython } from "./run.js";
-import { setPluginOpts, StarboardPythonPluginOpts } from "./opts";
+import { setPluginOpts, StarboardPythonPluginOpts, updatePluginOptions } from "./opts";
 
 export { getPyodideLoadingStatus, setupPythonSupport, loadPyodide, setGlobalPythonOutputElement };
 export { runStarboardPython } from "./run.js";
@@ -150,6 +150,7 @@ export const plugin: StarboardPlugin = {
     runStarboardPython: runStarboardPython,
     setGlobalPythonOutputElement: setGlobalPythonOutputElement,
     loadPyodide: loadPyodide,
+    updatePluginOptions: updatePluginOptions,
   },
   async register(runtime: Runtime, opts: StarboardPythonPluginOpts = {}) {
     setPluginOpts(opts);

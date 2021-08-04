@@ -16,3 +16,13 @@ export function getPluginOpts() {
 export function setPluginOpts(opts: StarboardPythonPluginOpts) {
   pluginOpts = opts;
 }
+
+/**
+ * Overwrite present options
+ */
+export function updatePluginOptions(opts: Partial<StarboardPythonPluginOpts>) {
+  pluginOpts = {
+    ...pluginOpts,
+    ...opts,
+  };
+}
