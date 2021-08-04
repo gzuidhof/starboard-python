@@ -5,6 +5,9 @@ function assertUnreachable(_x: never): never {
   throw new Error("This case should have never been reached");
 }
 
+// Hack: it should use tsconfig.json here instead, but the dts plugin doesn't want to listen..
+declare const importScripts: (v: any) => any;
+
 /**
  * Manages all the kernels in this worker.
  */
@@ -115,7 +118,7 @@ class KernelManager {
   }
 
   postMessage(message: KernelManagerResponse) {
-    self.postMessage(message);
+    (self.postMessage as any)(message);
   }
 
   log(kernel: WorkerKernel, ...args: string[]) {
