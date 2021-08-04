@@ -1,3 +1,6 @@
+## 0.7.2
+* Release with typescript typings on the plugin.
+
 ## 0.7.1
 * The Pyodide webworker code is now embedded in the source file which prevents issues with COOP/COEP/CORS policies.
 * Changed from kebab-case to snake_case for kernel messaging.

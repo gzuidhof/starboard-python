@@ -140,7 +140,15 @@ export function registerPython(runtime: Runtime) {
   runtime.definitions.cellTypes.register(PYTHON_CELL_TYPE_DEFINITION.cellType, PYTHON_CELL_TYPE_DEFINITION);
 }
 
-export const plugin: StarboardPlugin = {
+export type StarboardPluginExports = {
+  getPyodideLoadingStatus: typeof getPyodideLoadingStatus;
+  runStarboardPython: typeof runStarboardPython;
+  setGlobalPythonOutputElement: typeof setGlobalPythonOutputElement;
+  loadPyodide: typeof loadPyodide;
+  updatePluginOptions: typeof updatePluginOptions;
+};
+
+export const plugin: StarboardPlugin<StarboardPythonPluginOpts, StarboardPluginExports> = {
   id: "starboard-python",
   metadata: {
     name: "Starboard Python",
