@@ -1,3 +1,7 @@
+## 0.7.3
+* Fix main thread python not resolving (causing it to never be runnable).
+* Removed *proxy missing warning* from python in main thread mode.
+
 ## 0.7.2
 * Release with typescript typings on the plugin.
 

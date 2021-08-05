@@ -6,6 +6,7 @@ export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "im
   const pyodideWorkerOptions = opts.options as PyodideWorkerOptions;
   pyodideWorkerOptions.globalThisId = "";
   pyodideWorkerOptions.drawCanvasId = "";
+  pyodideWorkerOptions.isMainThread = true;
 
   const fakeKernel: KernelManagerType = {
     proxy: undefined,

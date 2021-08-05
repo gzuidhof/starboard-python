@@ -2,6 +2,7 @@ export type PyodideWorkerOptions = {
   artifactsUrl?: string;
   globalThisId?: string;
   drawCanvasId?: string;
+  isMainThread?: boolean;
 };
 
 export type PyodideWorkerResult = {

@@ -41,6 +41,7 @@ class PyodideKernel implements WorkerKernel {
     this.kernelId = options.id;
     this.options = options;
   }
+
   async init(): Promise<any> {
     this.proxiedGlobalThis = this.proxyGlobalThis(this.options.globalThisId);
     this.proxiedDrawCanvas =
@@ -62,7 +63,7 @@ class PyodideKernel implements WorkerKernel {
 
     /* self.importScripts(artifactsURL + "pyodide.js"); // Not used, we're importing our own pyodide.ts*/
 
-    if (!manager.proxy) {
+    if (!manager.proxy && !this.options.isMainThread) {
       console.warn("Missing object proxy, some Pyodide functionality will be restricted");
     }
 
