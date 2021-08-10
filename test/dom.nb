@@ -1,0 +1,11 @@
+# %% [python]
+from js import document
+
+el = document.createElement("h1")
+document.body.append(el);
+# %% [python]
+from js import document
+
+el = document.createElement("h1")
+# el as return value of cell
+el
