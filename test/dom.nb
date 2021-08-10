@@ -1,3 +1,8 @@
+---
+starboard:
+  python:
+    execution_mode: "pyodide_main_thread"
+---
 # %% [python]
 from js import document
 
