@@ -1,7 +1,7 @@
 ---
 starboard:
   python:
-    execution_mode: "pyodide_main_thread"
+    execution_mode: "pyodide_webworker"
 ---
 # %% [python]
 from js import document
