@@ -11,6 +11,7 @@ export async function mainThreadPyodide(opts: KernelManagerMessage & { type: "im
   const fakeKernel: KernelManagerType = {
     proxy: undefined,
     postMessage(message) {},
+    syncFs: undefined,
     input: () => {
       return prompt() || "";
     },

@@ -228,6 +228,22 @@ export class ObjectProxyHost {
       }
     } else if (message.type === "proxy_print_object") {
       console.log("Object with id", message.target, "is", this.getObject(message.target));
+    } else if (message.type === "proxy_promise") {
+      const promiseObject: Promise<any> = this.getObject(message.target);
+      if (message.method === "then") {
+        promiseObject[message.method](
+          (value) => {
+            const result = { value: value };
+            this.serializeMemory(result, memory);
+          },
+          (err) => {
+            const result = { error: err };
+            this.serializeMemory(result, memory);
+          }
+        );
+      } else {
+        console.error("Unknown proxy promise method", message);
+      }
     } else {
       console.warn("Unknown proxy message", message);
     }
@@ -374,6 +390,36 @@ export class ObjectProxyClient {
     return value;
   }
 
+  private proxyPromise(method: "then", targetId: string): { value?: any; error?: any } {
+    let value: any = undefined;
+    try {
+      this.memory.lockWorker();
+      this.memory.lockSize();
+      this.memory.writeSize(0);
+
+      this.postMessage({
+        type: "proxy_promise",
+        method: method,
+        target: targetId,
+      });
+
+      this.memory.waitForSize();
+      value = this.deserializeMemory(this.memory);
+    } catch (e) {
+      console.error({ method, targetId });
+      console.error(e);
+      this.postMessage({
+        type: "proxy_print_object",
+        target: targetId,
+      });
+    } finally {
+      // Regardless of what happened, unlock the size and the worker
+      this.memory.forceUnlockSize();
+      this.memory.unlockWorker();
+    }
+    return value;
+  }
+
   /** Checks if an id encodes a function. Mostly a silly hack to ensure that proxies can work as expected */
   private isFunction(id: string) {
     return id.endsWith("-f");
@@ -502,6 +548,21 @@ export class ObjectProxyClient {
       },
     });
   }
+
+  /**
+   * Blocks until an proxy object promise has returned a result or an error
+   */
+  thenSync<T>(obj: Promise<T>): T {
+    const objectId = (obj as any)[ObjectId];
+    if (!objectId) {
+      throw new Error("Not a proxy object");
+    }
+    const result = this.proxyPromise("then", objectId);
+    if (result.error) {
+      throw result.error;
+    }
+    return result.value;
+  }
 }
 
 function isSimplePrimitive(value: any) {
@@ -572,5 +633,10 @@ export type ProxyMessage =
     }
   | {
       type: "proxy_print_object";
+      target: string;
+    }
+  | {
+      type: "proxy_promise";
+      method: "then";
       target: string;
     };

@@ -20,7 +20,7 @@ export async function runStarboardPython(
   renderOutputIntoElement: HTMLElement
 ): Promise<any> {
   setupPythonSupport();
-  const pyoPromise = loadPyodide();
+  const pyoPromise = loadPyodide(runtime);
   const done = flatPromise();
 
   const alreadyRunningPythonCodeDone = pythonRunChain.catch((_) => 0);

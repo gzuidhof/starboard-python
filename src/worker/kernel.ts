@@ -1,4 +1,5 @@
 import { AsyncMemory } from "./async-memory";
+import { NotebookFilesystemSync } from "./emscripten-fs";
 import { ObjectId, ObjectProxyClient, ProxyMessage } from "./object-proxy";
 
 function assertUnreachable(_x: never): never {
@@ -21,6 +22,11 @@ class KernelManager {
    */
   input = () => "\n";
 
+  /**
+   * Synchronous filesystem
+   */
+  syncFs?: NotebookFilesystemSync;
+
   constructor() {
     self.addEventListener("message", async (e: MessageEvent) => {
       if (!e.data) {
@@ -38,6 +44,27 @@ class KernelManager {
 
             if (data.getInputId) {
               this.input = this.proxy.getObjectProxy(data.getInputId);
+            }
+            if (data.filesystemId) {
+              const proxy = this.proxy;
+              const asyncFs = this.proxy.getObjectProxy(data.filesystemId);
+              this.syncFs = {
+                get(opts) {
+                  return proxy.thenSync(asyncFs.get(opts));
+                },
+                put(opts) {
+                  return proxy.thenSync(asyncFs.put(opts));
+                },
+                delete(opts) {
+                  return proxy.thenSync(asyncFs.delete(opts));
+                },
+                move(opts) {
+                  return proxy.thenSync(asyncFs.move(opts));
+                },
+                listDirectory(opts) {
+                  return proxy.thenSync(asyncFs.listDirectory(opts));
+                },
+              };
             }
           } else {
             console.warn(
@@ -186,7 +213,7 @@ export type KernelManagerMessage =
         lockBuffer: SharedArrayBuffer;
         dataBuffer: SharedArrayBuffer;
       };
-      globalThisId?: string;
+      filesystemId?: string;
       getInputId?: string;
     }
   | {

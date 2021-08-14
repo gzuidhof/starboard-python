@@ -124,7 +124,7 @@ async function convertResult(data: PyodideWorkerResult, runtime: Runtime) {
   }
 }
 
-function loadKernelManager() {
+function loadKernelManager(runtime?: Runtime) {
   // TODO: This part should be moved to starboard
   let kernelUrl: string | undefined = undefined;
 
@@ -141,6 +141,10 @@ function loadKernelManager() {
   const getInputId = objectProxyHost?.registerRootObject(() => {
     return prompt();
   });
+  // TODO: Remove 'as any' once the starboard typings get updated
+  const filesystemId = (runtime?.internal as any)?.fs
+    ? objectProxyHost?.registerRootObject((runtime?.internal as any)?.fs)
+    : undefined;
 
   worker.addEventListener("message", (ev: MessageEvent) => {
     if (!ev.data) {
@@ -149,7 +153,12 @@ function loadKernelManager() {
     }
     const data = ev.data as KernelManagerResponse;
 
-    if (data.type === "proxy_reflect" || data.type === "proxy_shared_memory" || data.type === "proxy_print_object") {
+    if (
+      data.type === "proxy_reflect" ||
+      data.type === "proxy_shared_memory" ||
+      data.type === "proxy_print_object" ||
+      data.type === "proxy_promise"
+    ) {
       if (asyncMemory && objectProxyHost) {
         objectProxyHost.handleProxyMessage(data, asyncMemory);
       }
@@ -164,6 +173,7 @@ function loadKernelManager() {
           dataBuffer: asyncMemory.sharedMemory,
         }
       : undefined,
+    filesystemId: filesystemId,
     getInputId: getInputId,
   } as KernelManagerMessage);
 
@@ -173,10 +183,10 @@ function loadKernelManager() {
   };
 }
 
-export async function loadPyodide() {
+export async function loadPyodide(runtime?: Runtime) {
   if (pyodideLoadSingleton) return pyodideLoadSingleton;
 
-  const kernelManagerResult = loadKernelManager();
+  const kernelManagerResult = loadKernelManager(runtime);
   kernelManager = kernelManagerResult.kernelManager;
   objectProxyHost = kernelManagerResult.objectProxyHost;
 
@@ -260,7 +270,8 @@ export async function loadPyodide() {
         case "kernel_initialized":
         case "proxy_reflect":
         case "proxy_shared_memory":
-        case "proxy_print_object": {
+        case "proxy_print_object":
+        case "proxy_promise": {
           break;
         }
         default: {

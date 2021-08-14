@@ -6,6 +6,7 @@ import "../pyodide/pyodide";
 import type { Pyodide as PyodideType } from "../pyodide/typings";
 import type { KernelManagerType, WorkerKernel } from "./kernel";
 import { PyodideWorkerOptions, PyodideWorkerResult } from "./worker-message";
+import { EMFS } from "./emscripten-fs";
 
 declare global {
   interface WorkerGlobalScope {
@@ -77,6 +78,27 @@ class PyodideKernel implements WorkerKernel {
         manager.logError(this, text + "");
       },
     });
+    if (manager.syncFs) {
+      const FS = this.pyodide._module.FS;
+      console.log(FS);
+      try {
+        FS.mkdir("/mnt");
+      } catch (e) {
+        console.warn(e);
+      }
+      try {
+        FS.mkdir("/mnt/shared");
+      } catch (e) {
+        console.warn(e);
+      }
+
+      try {
+        FS.mount(new EMFS(FS, this.pyodide._module.ERRNO_CODES, manager.syncFs), { root: "/" }, "/mnt/shared");
+        this.pyodide.runPython('import os\nos.chdir("/mnt/shared")');
+      } catch (e) {
+        console.warn(e);
+      }
+    }
 
     if (this.proxiedGlobalThis) {
       // Fix "from js import ..."
