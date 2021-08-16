@@ -93,7 +93,7 @@ class PyodideKernel implements WorkerKernel {
       }
 
       try {
-        FS.mount(new EMFS(FS, this.pyodide._module.ERRNO_CODES, manager.syncFs), { root: "/" }, "/mnt/shared");
+        FS.mount(new EMFS(FS, this.pyodide._module.ERRNO_CODES, manager.syncFs), {}, "/mnt/shared");
         this.pyodide.runPython('import os\nos.chdir("/mnt/shared")');
       } catch (e) {
         console.warn(e);

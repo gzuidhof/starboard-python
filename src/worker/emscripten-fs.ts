@@ -65,6 +65,7 @@ export interface EMFSStream {
 }
 
 const DIR_MODE = 16895; // 040777
+const FILE_MODE = 33206; // 100666
 const SEEK_CUR = 1;
 const SEEK_END = 2;
 const encoder = new TextEncoder();
@@ -107,17 +108,17 @@ export class EMFS {
       }
     };
     this.node_ops.lookup = (parent: EMFSNode, name: string) => {
-      const path = [this.realPath(parent), name].join("/");
+      const path = realPath(parent, name);
       const result = this.CUSTOM_FS.get({ path });
       if (!result.ok) {
         // I wish Javascript had inner exceptions
         throw this.FS.genericErrors[this.ERRNO_CODES["ENOENT"]];
       }
-      return this.createNode(parent, name, 551); // TODO: The mode here is probably not correct
+      return this.createNode(parent, name, result.data === null ? DIR_MODE : FILE_MODE);
     };
     this.node_ops.mknod = (parent: EMFSNode, name: string, mode: number, dev?: any) => {
       const node = this.createNode(parent, name, mode, dev);
-      const path = this.realPath(node);
+      const path = realPath(node);
       try {
         if (this.FS.isDir(node.mode)) {
           let result = this.CUSTOM_FS.put({ path, value: null });
@@ -136,8 +137,8 @@ export class EMFS {
       return node;
     };
     this.node_ops.rename = (oldNode: EMFSNode, newDir: EMFSNode, newName: string) => {
-      const oldPath = this.realPath(oldNode);
-      const newPath = [this.realPath(newDir), newName].join("/");
+      const oldPath = realPath(oldNode);
+      const newPath = realPath(newDir, newName);
       try {
         let result = this.CUSTOM_FS.move({ path: oldPath, newPath: newPath });
         if (!result.ok) {
@@ -149,7 +150,7 @@ export class EMFS {
       oldNode.name = newName;
     };
     this.node_ops.unlink = (parent: EMFSNode, name: string) => {
-      const path = [this.realPath(parent), name].join("/");
+      const path = realPath(parent, name);
       try {
         let result = this.CUSTOM_FS.delete({ path });
         if (!result.ok) {
@@ -160,7 +161,7 @@ export class EMFS {
       }
     };
     this.node_ops.rmdir = (parent: EMFSNode, name: string) => {
-      const path = [this.realPath(parent), name].join("/");
+      const path = realPath(parent, name);
       try {
         let result = this.CUSTOM_FS.delete({ path });
         if (!result.ok) {
@@ -171,7 +172,7 @@ export class EMFS {
       }
     };
     this.node_ops.readdir = (node: EMFSNode) => {
-      const path = this.realPath(node);
+      const path = realPath(node);
       try {
         let result = this.CUSTOM_FS.listDirectory({ path });
         if (!result.ok) {
@@ -190,7 +191,7 @@ export class EMFS {
     };
 
     this.stream_ops.open = (stream: EMFSStream) => {
-      const path = this.realPath(stream.node);
+      const path = realPath(stream.node);
       try {
         if (FS.isFile(stream.node.mode)) {
           const result = this.CUSTOM_FS.get({ path });
@@ -207,7 +208,7 @@ export class EMFS {
       }
     };
     this.stream_ops.close = (stream: EMFSStream) => {
-      const path = this.realPath(stream.node);
+      const path = realPath(stream.node);
       try {
         if (FS.isFile(stream.node.mode) && stream.fileData) {
           const text = decoder.decode(stream.fileData);
@@ -218,7 +219,9 @@ export class EMFS {
           }
         }
       } catch (e) {
-        throw e;
+        const error = new FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
+        error.cause = e;
+        throw error;
       }
     };
     this.stream_ops.read = (
@@ -301,17 +304,20 @@ export class EMFS {
     return node;
   }
 
-  realPath(node: EMFSNode) {
-    const parts = [];
-    while (node.parent !== node) {
-      parts.push(node.name);
-      node = node.parent;
-    }
-    parts.push(node.mount.opts.root);
-    parts.reverse();
-    return parts.join("/");
-  }
-
   node_ops = {} as any;
   stream_ops = {} as any;
+}
+
+function realPath(node: EMFSNode, fileName?: string) {
+  const parts = [];
+  while (node.parent !== node) {
+    parts.push(node.name);
+    node = node.parent;
+  }
+  parts.push(node.mount.opts.root);
+  parts.reverse();
+  if (fileName !== undefined && fileName !== null) {
+    parts.push(fileName);
+  }
+  return parts.join("/");
 }
