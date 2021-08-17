@@ -47,7 +47,7 @@ export interface NotebookFilesystemSync {
   listDirectory(opts: { path: string }): SyncResult<string[]>;
 }
 
-export interface EMFSNode {
+interface EMFSNode {
   name: string;
   mode: number;
   parent: EMFSNode;
@@ -58,7 +58,7 @@ export interface EMFSNode {
   node_ops: any;
 }
 
-export interface EMFSStream {
+interface EMFSStream {
   node: EMFSNode;
   position: number;
   fileData?: Uint8Array;
@@ -75,6 +75,9 @@ export class EMFS {
   FS: any;
   ERRNO_CODES: any;
   CUSTOM_FS: NotebookFilesystemSync;
+
+  node_ops = {} as any;
+  stream_ops = {} as any;
 
   constructor(FS: any, ERRNO_CODES: any, CUSTOM_FS: NotebookFilesystemSync) {
     this.FS = FS;
@@ -119,69 +122,31 @@ export class EMFS {
     this.node_ops.mknod = (parent: EMFSNode, name: string, mode: number, dev?: any) => {
       const node = this.createNode(parent, name, mode, dev);
       const path = realPath(node);
-      try {
-        if (this.FS.isDir(node.mode)) {
-          let result = this.CUSTOM_FS.put({ path, value: null });
-          if (!result.ok) {
-            throw result.error;
-          }
-        } else {
-          let result = this.CUSTOM_FS.put({ path, value: "" });
-          if (!result.ok) {
-            throw result.error;
-          }
-        }
-      } catch (e) {
-        throw e;
+      if (this.FS.isDir(node.mode)) {
+        this.convertSyncResult(this.CUSTOM_FS.put({ path, value: null }));
+      } else {
+        this.convertSyncResult(this.CUSTOM_FS.put({ path, value: "" }));
       }
       return node;
     };
     this.node_ops.rename = (oldNode: EMFSNode, newDir: EMFSNode, newName: string) => {
       const oldPath = realPath(oldNode);
       const newPath = realPath(newDir, newName);
-      try {
-        let result = this.CUSTOM_FS.move({ path: oldPath, newPath: newPath });
-        if (!result.ok) {
-          throw result.error;
-        }
-      } catch (e) {
-        throw e;
-      }
+      this.convertSyncResult(this.CUSTOM_FS.move({ path: oldPath, newPath: newPath }));
       oldNode.name = newName;
     };
     this.node_ops.unlink = (parent: EMFSNode, name: string) => {
       const path = realPath(parent, name);
-      try {
-        let result = this.CUSTOM_FS.delete({ path });
-        if (!result.ok) {
-          throw result.error;
-        }
-      } catch (e) {
-        throw e;
-      }
+      this.convertSyncResult(this.CUSTOM_FS.delete({ path }));
     };
     this.node_ops.rmdir = (parent: EMFSNode, name: string) => {
       const path = realPath(parent, name);
-      try {
-        let result = this.CUSTOM_FS.delete({ path });
-        if (!result.ok) {
-          throw result.error;
-        }
-      } catch (e) {
-        throw e;
-      }
+      this.convertSyncResult(this.CUSTOM_FS.delete({ path }));
     };
     this.node_ops.readdir = (node: EMFSNode) => {
       const path = realPath(node);
-      try {
-        let result = this.CUSTOM_FS.listDirectory({ path });
-        if (!result.ok) {
-          throw result.error;
-        }
-        return result.data;
-      } catch (e) {
-        throw e;
-      }
+      let result = this.convertSyncResult(this.CUSTOM_FS.listDirectory({ path }));
+      return result;
     };
     this.node_ops.symlink = (parent: EMFSNode, newName: string, oldPath: string) => {
       throw new FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
@@ -192,36 +157,20 @@ export class EMFS {
 
     this.stream_ops.open = (stream: EMFSStream) => {
       const path = realPath(stream.node);
-      try {
-        if (FS.isFile(stream.node.mode)) {
-          const result = this.CUSTOM_FS.get({ path });
-          if (!result.ok) {
-            throw result.error;
-          }
-          if (result.data === null) {
-            return;
-          }
-          stream.fileData = encoder.encode(result.data);
+      if (FS.isFile(stream.node.mode)) {
+        const result = this.convertSyncResult(this.CUSTOM_FS.get({ path }));
+        if (result === null) {
+          return;
         }
-      } catch (e) {
-        throw e;
+        stream.fileData = encoder.encode(result);
       }
     };
     this.stream_ops.close = (stream: EMFSStream) => {
       const path = realPath(stream.node);
-      try {
-        if (FS.isFile(stream.node.mode) && stream.fileData) {
-          const text = decoder.decode(stream.fileData);
-          stream.fileData = undefined;
-          let result = this.CUSTOM_FS.put({ path, value: text });
-          if (!result.ok) {
-            throw result.error;
-          }
-        }
-      } catch (e) {
-        const error = new FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
-        error.cause = e;
-        throw error;
+      if (FS.isFile(stream.node.mode) && stream.fileData) {
+        const text = decoder.decode(stream.fileData);
+        stream.fileData = undefined;
+        this.convertSyncResult(this.CUSTOM_FS.put({ path, value: text }));
       }
     };
     this.stream_ops.read = (
@@ -234,6 +183,7 @@ export class EMFS {
       if (length <= 0) return 0;
 
       const size = Math.min((stream.fileData?.length ?? 0) - position, length);
+      // TODO: Better error handling here
       try {
         buffer.set(stream.fileData!.subarray(position, position + size), offset);
       } catch (e) {
@@ -304,8 +254,23 @@ export class EMFS {
     return node;
   }
 
-  node_ops = {} as any;
-  stream_ops = {} as any;
+  private convertSyncResult<T, E>(result: SyncResult<T, E>): T {
+    if (result.ok) {
+      return result.data;
+    } else {
+      let error;
+
+      if (result.status === 404) {
+        error = new this.FS.ErrnoError(this.ERRNO_CODES["ENOENT"]);
+      } else {
+        error = new this.FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
+      }
+
+      error.cause = result.error;
+
+      throw error;
+    }
+  }
 }
 
 function realPath(node: EMFSNode, fileName?: string) {
