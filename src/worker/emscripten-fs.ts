@@ -146,6 +146,12 @@ export class EMFS {
     this.node_ops.readdir = (node: EMFSNode) => {
       const path = realPath(node);
       let result = this.convertSyncResult(this.CUSTOM_FS.listDirectory({ path }));
+      if (!result.includes(".")) {
+        result.push(".");
+      }
+      if (!result.includes("..")) {
+        result.push("..");
+      }
       return result;
     };
     this.node_ops.symlink = (parent: EMFSNode, newName: string, oldPath: string) => {
@@ -183,11 +189,10 @@ export class EMFS {
       if (length <= 0) return 0;
 
       const size = Math.min((stream.fileData?.length ?? 0) - position, length);
-      // TODO: Better error handling here
       try {
         buffer.set(stream.fileData!.subarray(position, position + size), offset);
       } catch (e) {
-        throw e;
+        throw new FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
       }
       return size;
     };
@@ -214,7 +219,7 @@ export class EMFS {
 
         return length;
       } catch (e) {
-        throw e;
+        throw new FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
       }
     };
     this.stream_ops.llseek = (stream: EMFSStream, offset: number, whence: number) => {
@@ -227,7 +232,7 @@ export class EMFS {
             // Not sure, but let's see
             position += stream.fileData!.length;
           } catch (e) {
-            throw e;
+            throw new FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
           }
         }
       }
@@ -266,6 +271,7 @@ export class EMFS {
         error = new this.FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
       }
 
+      // I'm so looking forward to https://github.com/tc39/proposal-error-cause
       error.cause = result.error;
 
       throw error;
