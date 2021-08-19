@@ -209,6 +209,7 @@ export class EMFS {
       try {
         if (position + length > (stream.fileData?.length ?? 0)) {
           // Resize
+          // If this gets called very often, maybe resizing it by some multiple of its current size would be a better idea
           const oldData = stream.fileData ?? new Uint8Array();
           stream.fileData = new Uint8Array(position + length);
           stream.fileData.set(oldData);
@@ -267,6 +268,8 @@ export class EMFS {
 
       if (result.status === 404) {
         error = new this.FS.ErrnoError(this.ERRNO_CODES["ENOENT"]);
+      } else if (result.status === 400) {
+        error = new this.FS.ErrnoError(this.ERRNO_CODES["EINVAL"]);
       } else {
         error = new this.FS.ErrnoError(this.ERRNO_CODES["EPERM"]);
       }
